@@ -67,9 +67,27 @@ class SqliteStatement implements D1PreparedStatement {
     return this.rows() as T[];
   }
 
-  /** batch() 内部使用：在事务里执行并返回行数组 */
-  _execInTx(): unknown[] {
-    return this.rows();
+  /**
+   * batch() 内部使用：在事务里执行单条语句。
+   * D1 batch 允许读写混合，且 SELECT 的结果行也要在 D1Result.results 里返回；
+   * 用 better-sqlite3 的 stmt.reader 判断：读语句 all()，写语句 run()，
+   * 不能无条件 all()——DELETE/UPDATE 会抛“This statement does not return data”。
+   */
+  _execInTx(): D1Result {
+    const stmt = this.db.prepare(this.sql);
+    if (stmt.reader) {
+      return { results: stmt.all(...(this.binds as never[])) as unknown[], success: true, meta: {} };
+    }
+    const info = stmt.run(...(this.binds as never[]));
+    return {
+      results: [],
+      success: true,
+      meta: {
+        last_row_id: Number(info.lastInsertRowid),
+        changes: info.changes,
+        rows_written: info.changes,
+      },
+    };
   }
 }
 
@@ -95,7 +113,7 @@ export class SqliteD1 implements D1Database {
 
   async batch<T>(statements: D1PreparedStatement[]): Promise<D1Result<T>[]> {
     const tx = this.raw.transaction((items: SqliteStatement[]) =>
-      items.map(s => ({ results: s._execInTx() as T[], success: true, meta: {} }))
+      items.map(s => s._execInTx() as D1Result<T>)
     );
     return tx(statements as SqliteStatement[]);
   }
