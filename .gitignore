@@ -1,0 +1,18 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+
+# 运行时数据（SQLite 数据库 + 本地媒体存储）
+data/
+
+# 环境密钥
+.env
+.env.local
+
+# 临时文件
+.trae/
+_backup_*/
+emoji-dl/
+emoji_urls.csv
+Continue Task.md

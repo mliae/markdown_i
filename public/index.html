@@ -1,0 +1,278 @@
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#163bf2" />
+  <title>Moments</title>
+  <meta name="description" content="友圈式轻博客：图文动态与文章" />
+  <meta name="baidu-site-verification" content="codeva-x3GRnD8lgk" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='%23163bf2'%20stroke-width='2'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Cpath%20d='M21.174%206.812a1%201%200%200%200-3.986-3.987L3.842%2016.174a2%202%200%200%200-.5.83l-1.321%204.352a.5.5%200%200%200%20.623.622l4.353-1.32a2%202%200%200%200%20.83-.497z'/%3E%3Cpath%20d='m15%205%204%204'/%3E%3C/svg%3E" />
+  <script>
+    // 主题恢复（避免闪烁）：light / dark，默认跟随系统；localStorage 有值时锁定
+    // 注意：按时间切换的模式在 app.js 加载后执行，此处仅做兜底
+    (function () {
+      var t = localStorage.getItem("moments_theme");
+      if (t !== "light" && t !== "dark") {
+        t = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      }
+      document.documentElement.dataset.theme = t;
+    })();
+  </script>
+  <!--I18N_BOOT-->
+  <script>
+    // 语言首屏引导（无闪烁）：手动选择 > SSR 注入(cookie/访问地) > 浏览器语言 > 简中
+    (function () {
+      try {
+        var stored = localStorage.getItem("moments_lang");
+        var boot = window.__I18N_BOOT__ || null;
+        var ok = ["zh-CN", "zh-TW", "en"];
+        var lang = null;
+        if (ok.indexOf(stored) >= 0) lang = stored;
+        else if (boot && ok.indexOf(boot.lang) >= 0) lang = boot.lang;
+        else {
+          var l = (navigator.language || "zh-CN").toLowerCase();
+          if (l.indexOf("zh-hant") === 0 || l.indexOf("zh-tw") === 0 || l.indexOf("zh-hk") === 0 || l.indexOf("zh-mo") === 0) lang = "zh-TW";
+          else if (l.indexOf("zh") === 0) lang = "zh-CN";
+          else if (l.indexOf("en") === 0) lang = "en";
+        }
+        if (!lang) lang = "zh-CN";
+        document.documentElement.lang = lang === "zh-TW" ? "zh-Hant" : lang;
+      } catch (e) {}
+    })();
+  </script>
+  <link rel="alternate" type="application/rss+xml" title="RSS" href="/rss.xml" />
+  <link rel="stylesheet" href="/style.css?v=20261010h" />
+  <!--SSR_HEAD-->
+</head>
+<body>
+  <!-- 全站背景图层（site_bg_enabled 开启时由 app.js 填充 /api/bg；后台/弹窗/正文不玻璃化） -->
+  <div id="siteBg" aria-hidden="true"><div class="site-bg-mask"></div></div>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="/"><span class="brand-avatar"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg></span><span class="brand-name">Moments</span></a>
+      <nav class="nav">
+        <a href="/" data-route="feed">首页</a>
+        <a href="/posts" data-route="posts" data-i18n="nav.posts">文章</a>
+        <a href="/photos" data-route="photos" class="photos-nav-link" data-i18n="nav.photos">相册</a>
+        <a href="/links" data-route="links" class="links-nav-link" data-i18n="nav.links">友链</a>
+        <a href="/friends" data-route="friends" class="friends-nav-link" data-i18n="nav.friends">友圈</a>
+        <a href="/about" data-route="about" class="about-nav-link" hidden data-i18n="nav.about">关于</a>
+        <a href="/admin" data-route="admin" class="admin-only-nav" hidden data-i18n="nav.admin">后台</a>
+      </nav>
+      <div class="topbar-actions">
+        <div class="lang-switch" id="langSwitch" hidden></div>
+        <button class="topbar-btn" id="searchBtn" data-i18n-title="search.title" title="搜索" aria-label="搜索">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        </button>
+        <button class="topbar-btn" id="themeToggle" title="深色/浅色显示模式"></button>
+        <button class="topbar-btn menu-toggle" id="menuToggle" aria-label="打开菜单" aria-expanded="false" aria-controls="mobileMenu">
+          <svg class="i-menu" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
+          <svg class="i-close" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+        <div class="admin-area" id="adminArea"></div>
+      </div>
+    </div>
+    <div class="mobile-menu" id="mobileMenu">
+      <nav class="m-nav">
+        <a href="/" data-route="feed">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          <span>首页</span>
+        </a>
+        <a href="/posts" data-route="posts">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>
+          <span data-i18n="nav.posts">文章</span>
+        </a>
+        <a href="/photos" data-route="photos" class="photos-nav-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></svg>
+          <span data-i18n="nav.photos">相册</span>
+        </a>
+        <a href="/links" data-route="links" class="links-nav-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+          <span data-i18n="nav.links">友链</span>
+        </a>
+        <a href="/friends" data-route="friends" class="friends-nav-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/><path d="M12 8v0"/></svg>
+          <span data-i18n="nav.friends">友圈</span>
+        </a>
+        <a href="/about" data-route="about" class="about-nav-link" hidden>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg>
+          <span data-i18n="nav.about">关于</span>
+        </a>
+        <a href="/admin" data-route="admin" class="admin-only-nav" hidden>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></svg>
+          <span data-i18n="nav.admin">后台</span>
+        </a>
+      </nav>
+      <div class="admin-area m-admin-area" id="adminAreaMobile"></div>
+    </div>
+  </header>
+
+  <script>
+    // 旧版 hash 路由（#/post/xxx、#/photos…）301 式跳转到真实路径，保证外链/收藏可用
+    (function () {
+      var h = location.hash || "";
+      if (h.indexOf("#/") !== 0) return;
+      var rest = h.slice(2);
+      var map = { "": "/", posts: "/posts", photos: "/photos", admin: "/admin" };
+      var path = null;
+      if (map.hasOwnProperty(rest.split("?")[0])) {
+        path = map[rest.split("?")[0]];
+        var qIdx = rest.indexOf("?");
+        if (qIdx >= 0 && path === "/") path = "/";
+        if (qIdx >= 0 && rest.slice(0, qIdx) !== "") path += (path.indexOf("?") >= 0 ? "&" : "?") + rest.slice(qIdx + 1);
+      } else if (rest.indexOf("post/") === 0) {
+        path = "/" + rest;
+      }
+      if (path) history.replaceState(null, "", path);
+    })();
+  </script>
+
+  <script>
+    // 首帧顶栏修正：用上次缓存的设置立即替换默认品牌名/头像/导航文字，
+    // 消除「打开瞬间显示默认值，设置加载后才变成实际值」的闪现
+    (function () {
+      try {
+        var s = JSON.parse(localStorage.getItem("moments_settings") || "null");
+        if (!s || typeof s !== "object") return;
+        // 旧 workers.dev 域名迁移：旧绝对地址改相对路径，随当前域名走
+        if (typeof s.brand_avatar === "string") {
+          s.brand_avatar = s.brand_avatar.replace(/^https?:\/\/moments\.237333536\.workers\.dev/, "");
+        }
+        var av = document.querySelector(".brand-avatar");
+        if (av && /^https?:\/\//i.test(s.brand_avatar || "")) {
+          var img = document.createElement("img");
+          img.src = s.brand_avatar;
+          img.alt = "";
+          av.textContent = "";
+          av.appendChild(img);
+        }
+        var bn = document.querySelector(".brand-name");
+        if (bn && s.site_title) bn.textContent = s.site_title;
+        var nf = document.querySelector('[data-route="feed"]');
+        if (nf && s.nav_feeds_name) nf.textContent = s.nav_feeds_name;
+        if (s.site_title) document.title = s.site_title;
+      } catch (e) {}
+    })();
+  </script>
+
+  <main id="app" class="page-main"></main>
+
+  <!-- 页脚（文案与运行时间在后台站点设置中配置） -->
+  <footer class="site-footer" id="siteFooter" hidden>
+    <div class="site-footer-inner">
+      <div class="site-footer-text" data-footer-text></div>
+      <div class="site-footer-runtime" data-footer-runtime hidden></div>
+    </div>
+  </footer>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <!-- 悬浮发布按钮（管理员，非后台页可见） -->
+  <button id="fabPublish" class="fab-publish" data-i18n-title="feed.publish" title="发布说说" aria-label="发布说说" hidden>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" width="22" height="22" fill="currentColor"><path d="M256 80c0-17.7-14.3-32-32-32s-32 14.3-32 32v144H48c-17.7 0-32 14.3-32 32s14.3 32 32 32h144v144c0 17.7 14.3 32 32 32s32-14.3 32-32V288h144c17.7 0 32-14.3 32-32s-14.3-32-32-32H256z"/></svg>
+  </button>
+
+  <!-- 文章页返回顶部（仅 /post/ 且滚动超过一屏后出现） -->
+  <button id="backTop" class="back-top" data-i18n-title="common.back_top" title="返回顶部" aria-label="返回顶部" hidden>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg>
+  </button>
+
+  <!-- 音乐播放器（胶囊 + 播放列表） -->
+  <div id="musicPlayer" class="music-player" hidden>
+    <audio id="musicAudio" preload="metadata"></audio>
+
+    <!-- 歌词面板 -->
+    <div class="music-lyric" id="musicLyric" hidden></div>
+
+    <!-- 播放列表面板 -->
+    <div class="music-playlist" id="musicPlaylist" hidden>
+      <div class="music-playlist-head">
+        <span class="music-playlist-title" data-i18n="music.playlist">播放列表</span>
+        <button class="music-playlist-close" data-music-close-list data-i18n-aria-label="music.close_list" aria-label="关闭">×</button>
+      </div>
+      <div class="music-playlist-list" id="musicPlaylistList"></div>
+    </div>
+
+    <!-- 胶囊主体：三段式（信息 | 传输键 | 次要键），播放键为唯一实心重心 -->
+    <div class="music-capsule collapsed" id="musicCapsule">
+      <div class="music-seg music-seg-info">
+        <div class="music-cover-wrap">
+          <img class="music-cover" id="musicCover" alt="封面" data-i18n-alt="music.cover" referrerpolicy="no-referrer" />
+          <div class="music-cover-ring"></div>
+          <div class="music-cover-overlay" id="musicCoverOverlay">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+          </div>
+        </div>
+        <div class="music-info">
+          <div class="music-title" id="musicTitle" data-i18n="music.not_playing">未播放</div>
+          <div class="music-artist" id="musicArtist" data-i18n="music.click_play">点击播放</div>
+        </div>
+      </div>
+      <div class="music-seg music-seg-transport">
+        <button class="music-ctrl" data-music-prev data-i18n-title="music.prev" title="上一首" data-i18n-aria-label="music.prev" aria-label="上一首">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
+        </button>
+        <button class="music-ctrl music-play-btn" id="musicPlayBtn" data-music-play data-i18n-title="music.play_pause" title="播放/暂停" data-i18n-aria-label="music.play_pause" aria-label="播放/暂停">
+          <svg class="icon-play" viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+          <svg class="icon-pause" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" style="display:none"><path d="M6 5h4v14H6zm8 0h4v14h-4z"/></svg>
+          <svg class="icon-loading" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" style="display:none"><circle cx="12" cy="12" r="9" opacity=".3"/><path d="M21 12a9 9 0 0 0-9-9" stroke-linecap="round"/></svg>
+        </button>
+        <button class="music-ctrl" data-music-next data-i18n-title="music.next" title="下一首" data-i18n-aria-label="music.next" aria-label="下一首">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zM16 6h2v12h-2z"/></svg>
+        </button>
+      </div>
+      <div class="music-seg music-seg-aux">
+        <button class="music-ctrl music-mode-btn mode-list" data-music-mode title="播放模式：列表循环（点击切换 随机播放/单曲循环）" aria-label="播放模式">
+          <svg class="icon-list" viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg>
+          <svg class="icon-random" viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg>
+          <svg class="icon-one" viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4zm-4-2V9h-1l-2 1v1h1.5v4H13z"/></svg>
+        </button>
+        <button class="music-ctrl music-list-btn" data-music-list data-i18n-title="music.playlist_btn" title="播放列表" data-i18n-aria-label="music.playlist_btn" aria-label="播放列表">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M3 6h13v2H3zm0 5h13v2H3zm0 5h9v2H3zm15-5l5 3-5 3V11z"/></svg>
+        </button>
+        <button class="music-ctrl music-lyric-btn" data-music-lyric data-i18n-title="music.lyric" title="歌词" data-i18n-aria-label="music.lyric" aria-label="歌词">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M14 3v2h3.59l-9.3 9.29 1.42 1.42L19 6.41V10h2V3h-7zM5 5v14h14v-7h-2v5H7V7h5V5H5z"/></svg>
+        </button>
+        <div class="music-volume-wrap">
+          <button class="music-ctrl music-vol-btn" data-music-mute data-i18n-title="music.mute" title="静音" data-i18n-aria-label="music.mute" aria-label="静音">
+            <svg class="icon-vol-on" viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3a4.5 4.5 0 00-2.5-4v8a4.5 4.5 0 002.5-4zM14 3.23v2.06a7 7 0 010 13.42v2.06a9 9 0 000-17.54z"/></svg>
+            <svg class="icon-vol-off" viewBox="0 0 24 24" width="16" height="16" fill="currentColor" style="display:none"><path d="M3 9v6h4l5 5V4L7 9H3zm13.59 3L19 9.41 17.59 8 15 10.59 12.41 8 11 9.41 13.59 12 11 14.59 12.41 16 15 13.41 17.59 16 19 14.59z"/></svg>
+          </button>
+          <input class="music-volume" type="range" id="musicVolume" min="0" max="1" step="0.01" value="0.7" data-i18n-aria-label="music.volume" aria-label="音量" />
+        </div>
+        <button class="music-ctrl music-close-btn" data-music-close data-i18n-title="music.collapse" title="收起" data-i18n-aria-label="music.collapse" aria-label="收起">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </div>
+      <!-- 进度轨贴在胶囊底边横穿：宽度不随歌名长短浮动，拖拽行程就是播放器宽度 -->
+      <div class="music-progress" id="musicProgress">
+        <div class="music-progress-bar" id="musicProgressBar"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 模态容器：解锁 / 发动态 / 写文章 -->
+  <div id="modalRoot"></div>
+  <!-- 灯箱容器：独立于 modalRoot，避免开/关灯箱冲掉评论弹窗 -->
+  <div id="lightboxRoot"></div>
+
+  <!-- 站内搜索弹层 -->
+  <div id="searchOverlay" class="search-overlay" hidden>
+    <div class="search-backdrop" data-search-close></div>
+    <div class="search-panel" role="dialog" data-i18n-aria-label="search.title" aria-label="站内搜索">
+      <div class="search-box">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        <input id="searchInput" type="search" data-i18n-placeholder="search.placeholder" placeholder="搜索文章、说说、友链…" autocomplete="off" spellcheck="false" />
+        <button class="search-clear" id="searchClear" data-i18n-aria-label="search.clear" aria-label="清除" hidden>×</button>
+      </div>
+      <div class="search-results" id="searchResults"></div>
+      <div class="search-hint"><span data-i18n="search.hint_select">↑↓ 选择</span><span data-i18n="search.hint_open">Enter 打开</span><span data-i18n="search.hint_close">Esc 关闭</span></div>
+    </div>
+  </div>
+
+  <script src="/vendor/marked.min.js"></script>
+  <script src="/i18n.js?v=20261010h"></script>
+  <script src="/app.js?v=20261010h"></script>
+</body>
+</html>
