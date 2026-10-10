@@ -411,7 +411,7 @@ async function getIndexHtml(c: Context<HonoEnv>): Promise<string> {
   return text;
 }
 
-const TITLE_TAG = "<title>Moments</title>";
+const TITLE_TAG = "<title>Markdown-i</title>";
 const DESC_TAG = '<meta name="description" content="友圈式轻博客：图文动态与文章" />';
 // favicon 用正则匹配（模板里的默认图标颜色可能被手动改过，固定字符串会匹配不上导致替换静默失败）
 const ICON_RE = /<link rel="icon"[^>]*>/i;

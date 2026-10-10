@@ -38,9 +38,9 @@
 
   // 与后端 DEFAULT_SETTINGS 保持一致的前端兜底
   const DEFAULT_SETTINGS = {
-    site_title: "Moments",
+    site_title: "Markdown-i",
     nav_feeds_name: "首页",
-    essay_tips: "Moments · 轻博客",
+    essay_tips: "Markdown-i · 轻博客",
     essay_title: "即刻",
     essay_subtitle: "记录生活中的每一个瞬间，图文、视频与心情",
     essay_button_text: "发布即刻",
@@ -52,7 +52,7 @@
     music_collapsed: false,
     music_volume: "0.7",
     brand_avatar: "",
-    author_name: "Moments",
+    author_name: "Markdown-i",
     author_avatar: "",
     post_avatar: "",
     about_enabled: true,
@@ -72,7 +72,7 @@
     about_timeline:
       "2021|开始写博客|用文字记录生活的第一个节点\n" +
       "2023|第一次做独立站|从模板到自己动手，慢慢搭起这个小站\n" +
-      "2025|上线轻博客 Moments|更专注于碎片化的日常记录",
+      "2025|上线轻博客 Markdown-i|更专注于碎片化的日常记录",
     about_bigstats: "6|年记录\n120+|篇文字\n300+|张照片\n1000+|个瞬间",
     about_contacts:
       "GitHub|孤鸿剑尊|https://github.com/mliae\n邮箱|hi@jxe.me|mailto:hi@jxe.me\nRSS|订阅本站|/rss.xml",
@@ -1748,7 +1748,7 @@
         <div class="bber-author-row">
           <span class="bber-author">
             ${avatarSpanHtml(s.author_avatar, (s.author_name || "M").charAt(0))}
-            <span class="bber-author-nickname">${esc(s.author_name || "Moments")}</span>
+            <span class="bber-author-nickname">${esc(s.author_name || "Markdown-i")}</span>
           </span>
           <span class="bber-post-tag bber-post-tag--moment">${t("feed.moment_tag")}</span>
         </div>
@@ -7355,7 +7355,7 @@
           <summary class="admin-fold-summary">页脚</summary>
           <div class="admin-fold-body">
         <div class="field">
-          <label>页脚文案（可选，支持 HTML）<br /><small style="color:var(--anzhiyu-secondtext)">例如：© 2024 Jxe · 轻博客 · Powered by Moments</small></label>
+          <label>页脚文案（可选，支持 HTML）<br /><small style="color:var(--anzhiyu-secondtext)">例如：© 2024 Markdown-i · 轻博客 · Powered by Markdown-i</small></label>
           <textarea name="footer_text" maxlength="2000" rows="3" placeholder="© 2024 My Site. All rights reserved.">${esc(s.footer_text)}</textarea>
         </div>
         <div class="field">

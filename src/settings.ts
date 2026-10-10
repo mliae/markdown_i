@@ -150,9 +150,9 @@ export interface SiteSettings {
 }
 
 export const DEFAULT_SETTINGS: SiteSettings = {
-  site_title: "Jxe",
+  site_title: "Markdown-i",
   nav_feeds_name: "首页",
-  essay_tips: "Jxe · 轻博客",
+  essay_tips: "Markdown-i · 轻博客",
   essay_title: "即刻",
   essay_subtitle: "记录生活中的每一个瞬间，图文、视频与心情",
   essay_button_text: "发布即刻",
@@ -166,7 +166,7 @@ export const DEFAULT_SETTINGS: SiteSettings = {
   music_api_url: "",
   music_api_key: "",
   brand_avatar: "",
-  author_name: "Jxe",
+  author_name: "Markdown-i",
   author_avatar: "",
   post_avatar: "",
   // 关于我（默认开启，带演示内容，可在后台「设置 - 关于我」修改）
@@ -189,7 +189,7 @@ export const DEFAULT_SETTINGS: SiteSettings = {
   about_timeline:
     "2021|开始写博客|用文字记录生活的第一个节点\n" +
     "2023|第一次做独立站|从模板到自己动手，慢慢搭起这个小站\n" +
-    "2025|上线轻博客 Moments|更专注于碎片化的日常记录",
+    "2025|上线轻博客 Markdown-i|更专注于碎片化的日常记录",
   about_bigstats: "6|年记录\n120+|篇文字\n300+|张照片\n1000+|个瞬间",
   about_contacts:
     "GitHub|孤鸿剑尊|https://github.com/mliae\n" +
