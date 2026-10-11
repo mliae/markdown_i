@@ -152,17 +152,21 @@ export class DiskR2 implements R2Bucket {
     };
   }
 
-  async delete(key: string): Promise<void> {
-    const p = safePath(this.root, key);
-    try {
-      unlinkSync(p);
-    } catch {
-      /* 不存在视为已删除 */
-    }
-    try {
-      unlinkSync(this.metaPath(p));
-    } catch {
-      /* ignore */
+  async delete(key: string | string[]): Promise<void> {
+    // 兼容 R2Bucket.delete(string | string[])：数组批量删除
+    const keys = Array.isArray(key) ? key : [key];
+    for (const k of keys) {
+      const p = safePath(this.root, k);
+      try {
+        unlinkSync(p);
+      } catch {
+        /* 不存在视为已删除 */
+      }
+      try {
+        unlinkSync(this.metaPath(p));
+      } catch {
+        /* ignore */
+      }
     }
   }
 

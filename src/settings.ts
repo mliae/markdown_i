@@ -70,9 +70,13 @@ export interface SiteSettings {
   video_default_poster: string; // 统一视频封面 URL（说说/文章视频未单独设置封面时使用）
   // 域名
   site_domain: string; // 站点主域名（带 https://，如 https://jxe.me），用于 SEO/RSS/OG 绝对 URL；留空=用请求 origin
-  r2_domain: string; // R2 自定义域名（带 https://，如 https://r2.e.jxe.me）；留空=走 Worker /media/ 代理
   // 存储管理
-  storage_mode: string; // 上传存储：r2=Cloudflare R2（默认，旧文件继续在 R2） / b2=Backblaze B2（新上传走 B2）
+  storage_mode: string; // 上传存储：local=服务器本地磁盘（Node 版默认） / r2=Cloudflare R2（S3 API） / b2=Backblaze B2
+  r2_endpoint: string; // R2 S3 端点（带 https://，如 https://<account_id>.r2.cloudflarestorage.com）
+  r2_bucket: string; // R2 桶名
+  r2_key_id: string; // R2 Access Key ID（私密，不公开）
+  r2_secret_key: string; // R2 Secret Access Key（私密，不公开）
+  r2_domain: string; // R2 公开访问域名（带 https://）；留空=走本站 /media/ 代理
   b2_endpoint: string; // B2 S3 兼容端点（带 https://，如 https://s3.us-west-004.backblazeb2.com）
   b2_bucket: string; // B2 桶名
   b2_key_id: string; // B2 Application Key ID（私密，不公开）
@@ -218,8 +222,12 @@ export const DEFAULT_SETTINGS: SiteSettings = {
   feed_page_size: "20",
   video_default_poster: "",
   site_domain: "",
+  storage_mode: "local",
+  r2_endpoint: "",
+  r2_bucket: "",
+  r2_key_id: "",
+  r2_secret_key: "",
   r2_domain: "",
-  storage_mode: "r2",
   b2_endpoint: "",
   b2_bucket: "",
   b2_key_id: "",
@@ -334,8 +342,12 @@ const STRING_LIMITS: Partial<Record<keyof SiteSettings, number>> = {
   feed_page_size: 3,
   video_default_poster: 500,
   site_domain: 200,
-  r2_domain: 200,
   storage_mode: 10,
+  r2_endpoint: 200,
+  r2_bucket: 100,
+  r2_key_id: 100,
+  r2_secret_key: 200,
+  r2_domain: 200,
   b2_endpoint: 200,
   b2_bucket: 100,
   b2_key_id: 100,
@@ -505,13 +517,18 @@ export function normalizeSettings(raw: Record<string, unknown> | null | undefine
   out.friends_quota_community = clampQuota(out.friends_quota_community, DEFAULT_SETTINGS.friends_quota_community);
   out.friends_quota_tech = clampQuota(out.friends_quota_tech, DEFAULT_SETTINGS.friends_quota_tech);
   if (out.banner_bg_mode !== "static" && out.banner_bg_mode !== "random") out.banner_bg_mode = DEFAULT_SETTINGS.banner_bg_mode;
-  // 存储模式：r2=Cloudflare R2 / b2=Backblaze B2，非法回退默认
-  if (out.storage_mode !== "r2" && out.storage_mode !== "b2") out.storage_mode = DEFAULT_SETTINGS.storage_mode;
+  // 存储模式：local=本地磁盘 / r2=Cloudflare R2(S3) / b2=Backblaze B2，非法回退默认
+  if (!["local", "r2", "b2"].includes(out.storage_mode)) out.storage_mode = DEFAULT_SETTINGS.storage_mode;
   // B2 端点/域名：自动补 https:// 前缀（防手滑漏写导致 Invalid URL）；B2 域名误填占位提示文字时视为未填
   const b2ep = out.b2_endpoint.trim();
   if (b2ep && !/^https?:\/\//i.test(b2ep)) out.b2_endpoint = "https://" + b2ep;
   const b2dm = out.b2_domain.trim();
   if (!b2dm || /^[^ ]*[（(]私有桶/.test(b2dm)) out.b2_domain = "";
+  // R2 端点同样自动补 https://；域名误填占位提示文字时视为未填
+  const r2ep = out.r2_endpoint.trim();
+  if (r2ep && !/^https?:\/\//i.test(r2ep)) out.r2_endpoint = "https://" + r2ep;
+  const r2dm = out.r2_domain.trim();
+  if (!r2dm || /^[^ ]*[（(]私有桶|留空/.test(r2dm)) out.r2_domain = "";
   // 多语言：默认语言/开放语言白名单校验，非法回退默认；保证默认语言一定在开放列表中
   const I18N_SUPPORTED = ["zh-CN", "zh-TW", "en"];
   if (!I18N_SUPPORTED.includes(out.i18n_default)) out.i18n_default = DEFAULT_SETTINGS.i18n_default;

@@ -21,7 +21,7 @@ import { getSettings, updateSettings, normalizeAdminPath } from "../settings";
 import { createComment, deleteCommentAnywhere, editCommentAnywhere } from "../comment-service";
 import { handleCommentMailNotifications } from "../mail";
 import { ensureAvatar } from "../avatar";
-import { putObject, testB2Storage } from "../storage";
+import { putObject, testB2Storage, testR2Storage, storagePrefix } from "../storage";
 
 import { ATTACK_RULES, banIp, unbanIp, sendWebhookAlert } from "../security";
 
@@ -241,7 +241,7 @@ app.post("/upload", requireAdmin, async c => {
   if (customKey) {
     if (!/^uploads\/[\w./-]+_w1200\.jpg$/i.test(customKey) || customKey.includes(".."))
       return fail(c, "非法的缩略图 key");
-    const finalKey = s.storage_mode === "b2" ? `b2/${customKey}` : customKey;
+    const finalKey = `${storagePrefix(s.storage_mode)}${customKey}`;
     await putObject(c.env.R2, s, finalKey, file.stream(), "image/jpeg");
     return ok(c, { key: finalKey, src: keyToSrc(finalKey, s.r2_domain, s.b2_domain), content_type: "image/jpeg", size: file.size, has_thumb: false }, "缩略图已写入");
   }
@@ -271,8 +271,8 @@ app.post("/upload", requireAdmin, async c => {
     return fail(c, "未知的上传类型");
   }
 
-  // B2 模式下对象 key 统一加 b2/ 前缀，便于路由与删除
-  const finalKey = s.storage_mode === "b2" ? `b2/${key}` : key;
+  // 远端存储模式对象 key 统一加 b2/、r2/ 前缀，便于路由与删除
+  const finalKey = `${storagePrefix(s.storage_mode)}${key}`;
   await putObject(c.env.R2, s, finalKey, file.stream(), contentType);
 
   // 若附带缩略图，存储为 _w1200.jpg（不阻塞原图已写入）
@@ -352,12 +352,18 @@ app.put("/settings", requireAdmin, async c => {
 });
 
 /**
- * POST /api/admin/storage/test  测试 B2 存储连接（写入并删除探针对象）
- * 不修改 storage_mode，仅验证当前填写的 B2 endpoint/bucket/凭证是否可用。
+ * POST /api/admin/storage/test  测试对象存储连接（写入并删除探针对象）
+ * body: { type?: "r2" | "b2" }（默认 b2 兼容旧前端）。
+ * 不修改 storage_mode，仅验证当前填写的 endpoint/bucket/凭证是否可用。
  */
 app.post("/storage/test", requireAdmin, async c => {
+  let type = "b2";
+  try {
+    const body = (await c.req.json().catch(() => ({}))) as { type?: string };
+    if (body && (body.type === "r2" || body.type === "b2")) type = body.type;
+  } catch { /* 空 body 走默认 */ }
   const s = await getSettings(c.env.DB);
-  const r = await testB2Storage(s);
+  const r = type === "r2" ? await testR2Storage(s) : await testB2Storage(s);
   return ok(c, r);
 });
 

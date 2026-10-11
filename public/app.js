@@ -95,8 +95,12 @@
     feed_page_size: "20",
     video_default_poster: "",
     site_domain: "",
+    storage_mode: "local",
+    r2_endpoint: "",
+    r2_bucket: "",
+    r2_key_id: "",
+    r2_secret_key: "",
     r2_domain: "",
-    storage_mode: "r2",
     b2_endpoint: "",
     b2_bucket: "",
     b2_key_id: "",
@@ -450,13 +454,13 @@
   }
 
   /**
-   * 裸 key（uploads/ / b2/uploads/ 开头）→ 解析为可访问的完整 URL（数据库统一存 key）。
-   * 与后端 keyToSrc 同规则：b2/ 前缀走 B2 直连域名，未配置时走 /media/ Worker 签名代理；
-   * 绝不能把 b2/ key 拼到 R2 域名上（R2 桶里没有 B2 对象，必定 404）。外链原样返回。
+   * 裸 key（uploads/ / b2/uploads/ / r2/uploads/ 开头）→ 解析为可访问的完整 URL（数据库统一存 key）。
+   * 与后端 keyToSrc 同规则：b2/ 前缀走 B2 直连域名，r2/ 前缀与无前缀（本地磁盘）走 R2 域名，
+   * 未配置域名时走 /media/ 服务端代理；绝不能把 b2/ key 拼到 R2 域名上（桶里没有该对象，必定 404）。外链原样返回。
    */
   function fullSrc(src) {
     if (!src) return src;
-    if (/^(uploads|b2\/uploads)\//.test(src)) {
+    if (/^(uploads|b2\/uploads|r2\/uploads)\//.test(src)) {
       const r2 = (state.settings?.r2_domain || "").replace(/\/$/, "");
       const b2 = (state.settings?.b2_domain || "").replace(/\/$/, "");
       if (src.startsWith("b2/")) return b2 ? b2 + "/" + src : "/media/" + src;
@@ -517,11 +521,11 @@
         try {
           if (src.includes("/media/")) {
             const k = decodeURIComponent(src.split("/media/")[1].split(/[?#]/)[0]);
-            return k.startsWith("uploads/") || k.startsWith("b2/uploads/") ? k : null;
+            return k.startsWith("uploads/") || k.startsWith("b2/uploads/") || k.startsWith("r2/uploads/") ? k : null;
           }
           if (r2 && src.startsWith(r2 + "/")) {
             const k = decodeURIComponent(src.slice(r2.length + 1).split(/[?#]/)[0]);
-            return k.startsWith("uploads/") ? k : null;
+            return /^(r2\/)?uploads\//.test(k) ? k : null;
           }
           if (b2 && src.startsWith(b2 + "/")) {
             const k = decodeURIComponent(src.slice(b2.length + 1).split(/[?#]/)[0]);
@@ -530,8 +534,12 @@
         } catch {}
         return null;
       };
-      // B2 对象走 B2 直连域名取原图（桶内 key 本身含 b2/ 前缀；/media/ 代理只服务 R2），其余走 /media/
-      const fetchSrc = key => (key.startsWith("b2/") && b2 ? b2 + "/" + encodeURI(key) : "/media/" + encodeURI(key));
+      // 远端对象优先走直连域名取原图（b2/→B2 域名，r2/→R2 域名），未配域名或本地对象走 /media/ 代理
+      const fetchSrc = key => {
+        if (key.startsWith("b2/")) return b2 ? b2 + "/" + encodeURI(key) : "/media/" + encodeURI(key);
+        if (key.startsWith("r2/")) return r2 ? r2 + "/" + encodeURI(key) : "/media/" + encodeURI(key);
+        return "/media/" + encodeURI(key);
+      };
       const keys = new Set();
       let cursor = "";
       setMsg("正在收集图片列表…");
@@ -585,8 +593,8 @@
           const fd = new FormData();
           fd.append("file", thumb, "thumb.jpg");
           fd.append("kind", "image");
-          // 后端按 uploads/ 前缀校验后自动按存储模式加 b2/ 前缀，B2 key 需去掉前缀再传
-          fd.append("key", key.startsWith("b2/") ? key.slice(3) : key);
+          // 后端按 uploads/ 前缀校验后自动按存储模式加 b2/、r2/ 前缀，远端 key 需去掉前缀再传
+          fd.append("key", key.replace(/^(b2|r2)\//, ""));
           const res = await fetchWithTimeout("/api/admin/upload", { method: "POST", body: fd, credentials: "same-origin" });
           if (res.ok) made++; else failed++;
         } catch {
@@ -2031,7 +2039,7 @@
     const b2 = (state.settings?.b2_domain || "").replace(/\/$/, "");
     const s = String(src || "");
     if (/^\/?media\//.test(s)) return s.replace(/^\/?media\//, "");
-    if (/^(uploads|b2\/uploads)\//.test(s)) return s;
+    if (/^(uploads|b2\/uploads|r2\/uploads)\//.test(s)) return s;
     if (/^https?:\/\//i.test(s) && ((r2 && s.startsWith(r2 + "/")) || (b2 && s.startsWith(b2 + "/")))) {
       return s.replace(/^https?:\/\/[^/]+\//i, "");
     }
@@ -7778,19 +7786,47 @@
       <div class="admin-panel-head"><h3>域名与存储</h3></div>
       <form class="settings-form" data-settings-form>
         <div class="field">
-          <label>站点域名（可选）<br /><small style="color:var(--anzhiyu-secondtext)">带 https://，如 https://e.jxe.me。用于 SEO/RSS/OG 标签生成绝对 URL；留空则使用当前访问域名。换域名时填新域名即可，无需改代码</small></label>
-          <input name="site_domain" maxlength="200" value="${esc(s.site_domain)}" placeholder="https://e.jxe.me（留空=自动）" />
+          <label>站点域名（可选）<br /><small style="color:var(--anzhiyu-secondtext)">带 https://，如 https://ymao.me。用于 SEO/RSS/OG 标签生成绝对 URL；留空则使用当前访问域名。换域名时填新域名即可，无需改代码</small></label>
+          <input name="site_domain" maxlength="200" value="${esc(s.site_domain)}" placeholder="https://ymao.me（留空=自动）" />
         </div>
         <div class="field">
-          <label>R2 媒体域名（可选）<br /><small style="color:var(--anzhiyu-secondtext)">R2 桶绑定的自定义域名，带 https://，如 https://r2.e.jxe.me。填写后图片/视频直连 R2，不经过 Worker（节省 Worker 请求额度）；留空则走 /media/ 代理</small></label>
-          <input name="r2_domain" maxlength="200" value="${esc(s.r2_domain)}" placeholder="https://r2.e.jxe.me（留空=走 /media/ 代理）" />
-        </div>
-        <div class="field">
-          <label>上传存储<br /><small style="color:var(--anzhiyu-secondtext)">切换不影响历史文件：R2 旧文件继续通过上方 R2 域名正常访问；选择 B2 后，<b>新上传</b>的图片/视频/头像/评论图都会存入 B2（对象自动加 b2/ 前缀）。B2 桶公开填了域名则直连访问，私有桶则自动走 Worker 代理</small></label>
+          <label>上传存储<br /><small style="color:var(--anzhiyu-secondtext)">切换不影响历史文件：已上传的旧文件按原位置继续访问与删除；选择对象存储后，仅<b>新上传</b>的图片/视频/头像/评论图进入对应桶（对象自动加 r2/、b2/ 前缀）。绑定了公开域名则直连访问，未绑域名则自动走本站 /media/ 签名代理</small></label>
           <select name="storage_mode" data-storage-mode>
-            <option value="r2" ${s.storage_mode !== "b2" ? "selected" : ""}>Cloudflare R2（默认，新上传存 R2）</option>
-            <option value="b2" ${s.storage_mode === "b2" ? "selected" : ""}>Backblaze B2（新上传存 B2）</option>
+            <option value="local" ${s.storage_mode === "local" ? "selected" : ""}>本地磁盘（默认，文件保存在服务器 data/media 目录）</option>
+            <option value="r2" ${s.storage_mode === "r2" ? "selected" : ""}>Cloudflare R2（新上传存 R2，S3 API）</option>
+            <option value="b2" ${s.storage_mode === "b2" ? "selected" : ""}>Backblaze B2（新上传存 B2，S3 API）</option>
           </select>
+        </div>
+        <div data-local-fields style="${s.storage_mode === "local" ? "" : "display:none"};border:1px dashed var(--anzhiyu-border, #555);border-radius:10px;padding:.75rem 1rem;margin-bottom:.25rem">
+          <div class="field" style="margin-bottom:0">
+            <label>本地磁盘存储<br /><small style="color:var(--anzhiyu-secondtext)">无需任何配置：上传文件保存在服务器 <code>data/media/</code> 目录，通过本站 <code>/media/</code> 路径由 Nginx/Node 直接输出。零外部依赖、零流量费用，占用服务器磁盘空间；建议在宝塔计划任务里定期备份 <code>data/</code> 目录。</small></label>
+          </div>
+        </div>
+        <div data-r2-fields style="${s.storage_mode === "r2" ? "" : "display:none"};border:1px dashed var(--anzhiyu-border, #555);border-radius:10px;padding:.75rem 1rem;margin-bottom:.25rem">
+          <div class="field">
+            <label>R2 S3 端点<br /><small style="color:var(--anzhiyu-secondtext)">Cloudflare R2 概览页的 S3 API 地址，带 https://，形如 https://&lt;账号ID&gt;.r2.cloudflarestorage.com</small></label>
+            <input name="r2_endpoint" maxlength="200" value="${esc(s.r2_endpoint)}" placeholder="https://<account_id>.r2.cloudflarestorage.com" autocomplete="off" />
+          </div>
+          <div class="field">
+            <label>R2 桶名<br /><small style="color:var(--anzhiyu-secondtext)">存储桶名称（Bucket name）</small></label>
+            <input name="r2_bucket" maxlength="100" value="${esc(s.r2_bucket)}" placeholder="my-markdown-i" autocomplete="off" />
+          </div>
+          <div class="field">
+            <label>Access Key ID<br /><small style="color:var(--anzhiyu-secondtext)">在 R2「管理 API 令牌」中创建 S3 凭证后的 Access Key ID，需具备对象读写权限</small></label>
+            <input name="r2_key_id" maxlength="100" value="${esc(s.r2_key_id)}" placeholder="Access Key ID" autocomplete="off" />
+          </div>
+          <div class="field">
+            <label>Secret Access Key<br /><small style="color:var(--anzhiyu-secondtext)">S3 凭证的 Secret Access Key，只保存在服务端，公开 API 不下发</small></label>
+            <input name="r2_secret_key" type="password" maxlength="200" value="${esc(s.r2_secret_key)}" placeholder="Secret Access Key" autocomplete="new-password" />
+          </div>
+          <div class="field">
+            <label>R2 公开访问域名（未绑域名留空）<br /><small style="color:var(--anzhiyu-secondtext)">桶已绑定自定义域名（或 r2.dev 免费域名）时填写，带 https://，文件直连访问、不经过本站服务器；<b>留空</b>则自动走 /media/ 签名代理（R2 出口流量免费）</small></label>
+            <input name="r2_domain" maxlength="200" value="${esc(s.r2_domain)}" placeholder="未绑域名留空，走本站 /media/ 代理" />
+          </div>
+          <div style="display:flex;gap:.75rem;align-items:center">
+            <button type="button" class="btn" data-storage-test="r2">测试 R2 连接</button>
+            <span data-storage-test-msg="r2" style="font-size:.8rem;color:var(--anzhiyu-secondtext)"></span>
+          </div>
         </div>
         <div data-b2-fields style="${s.storage_mode === "b2" ? "" : "display:none"};border:1px dashed var(--anzhiyu-border, #555);border-radius:10px;padding:.75rem 1rem;margin-bottom:.25rem">
           <div class="field">
@@ -7799,7 +7835,7 @@
           </div>
           <div class="field">
             <label>B2 桶名<br /><small style="color:var(--anzhiyu-secondtext)">存储桶名称（Bucket），需已设为公开，否则图片无法通过下方域名访问</small></label>
-            <input name="b2_bucket" maxlength="100" value="${esc(s.b2_bucket)}" placeholder="my-moments-bucket" />
+            <input name="b2_bucket" maxlength="100" value="${esc(s.b2_bucket)}" placeholder="my-markdown-i" />
           </div>
           <div class="field">
             <label>Application Key ID<br /><small style="color:var(--anzhiyu-secondtext)">B2 应用密钥 ID（keyID），需具备读写权限</small></label>
@@ -7810,12 +7846,12 @@
             <input name="b2_app_key" type="password" maxlength="200" value="${esc(s.b2_app_key)}" placeholder="applicationKey" autocomplete="new-password" />
           </div>
           <div class="field">
-            <label>B2 公开访问域名（私有桶留空）<br /><small style="color:var(--anzhiyu-secondtext)">桶设为公开并绑定自定义域名时填写（带 https://，如 https://b2.e.jce.me），文件直连访问、不消耗 Worker 请求；<b>私有桶留空即可</b>，文件自动走 Worker 签名代理访问（无需信用卡，B2 egress 走 Cloudflare 联盟免费）</small></label>
-            <input name="b2_domain" maxlength="200" value="${esc(s.b2_domain)}" placeholder="私有桶留空" />
+            <label>B2 公开访问域名（私有桶留空）<br /><small style="color:var(--anzhiyu-secondtext)">桶设为公开并绑定自定义域名时填写（带 https://），文件直连访问、不经过本站服务器；<b>私有桶留空即可</b>，文件自动走 /media/ 签名代理访问</small></label>
+            <input name="b2_domain" maxlength="200" value="${esc(s.b2_domain)}" placeholder="私有桶留空，走本站 /media/ 代理" />
           </div>
           <div style="display:flex;gap:.75rem;align-items:center">
-            <button type="button" class="btn" data-b2-test>测试 B2 连接</button>
-            <span data-b2-test-msg style="font-size:.8rem;color:var(--anzhiyu-secondtext)"></span>
+            <button type="button" class="btn" data-storage-test="b2">测试 B2 连接</button>
+            <span data-storage-test-msg="b2" style="font-size:.8rem;color:var(--anzhiyu-secondtext)"></span>
           </div>
         </div>
         <div class="field">
@@ -7874,39 +7910,47 @@
       });
     }
 
-    // 存储模式下拉：切换 B2 配置区显隐
+    // 存储模式下拉：切换 本地/R2/B2 三个配置区显隐
     const storageModeEl = panel.querySelector("[data-storage-mode]");
+    const localFields = panel.querySelector("[data-local-fields]");
+    const r2Fields = panel.querySelector("[data-r2-fields]");
     const b2Fields = panel.querySelector("[data-b2-fields]");
-    if (storageModeEl && b2Fields) {
+    if (storageModeEl) {
       storageModeEl.addEventListener("change", () => {
-        b2Fields.style.display = storageModeEl.value === "b2" ? "" : "none";
+        const v = storageModeEl.value;
+        if (localFields) localFields.style.display = v === "local" ? "" : "none";
+        if (r2Fields) r2Fields.style.display = v === "r2" ? "" : "none";
+        if (b2Fields) b2Fields.style.display = v === "b2" ? "" : "none";
       });
     }
-    // B2 连接测试：先用当前表单值保存，再调用测试接口（服务端读已存配置）
-    const b2TestBtn = panel.querySelector("[data-b2-test]");
-    if (b2TestBtn) {
-      const tmsg = panel.querySelector("[data-b2-test-msg]");
-      b2TestBtn.addEventListener("click", async () => {
-        b2TestBtn.disabled = true;
-        if (tmsg) { tmsg.style.color = ""; tmsg.textContent = "测试中…（会先保存 B2 配置）"; }
+    // 存储连接测试（R2/B2 通用）：先用当前表单值保存，再调用测试接口（服务端读已存配置）
+    panel.querySelectorAll("[data-storage-test]").forEach(btn => {
+      const type = btn.getAttribute("data-storage-test"); // "r2" | "b2"
+      const tmsg = panel.querySelector(`[data-storage-test-msg="${type}"]`);
+      const fieldKeys = type === "r2"
+        ? ["storage_mode", "r2_endpoint", "r2_bucket", "r2_key_id", "r2_secret_key", "r2_domain"]
+        : ["storage_mode", "b2_endpoint", "b2_bucket", "b2_key_id", "b2_app_key", "b2_domain"];
+      btn.addEventListener("click", async () => {
+        btn.disabled = true;
+        if (tmsg) { tmsg.style.color = ""; tmsg.textContent = `测试中…（会先保存 ${type.toUpperCase()} 配置）`; }
         try {
-          // 先保存当前表单（保证服务端拿到最新填写的 B2 配置），再触发测试
+          // 先保存当前表单（保证服务端拿到最新填写的凭证），再触发测试
           const fd = new FormData(panel.querySelector("[data-settings-form]"));
           const patch = {};
-          ["storage_mode", "b2_endpoint", "b2_bucket", "b2_key_id", "b2_app_key", "b2_domain"].forEach(k => {
+          fieldKeys.forEach(k => {
             if (fd.has(k)) patch[k] = String(fd.get(k) || "").trim();
           });
           await api("/api/admin/settings", { method: "PUT", body: patch });
-          const r = await api("/api/admin/storage/test", { method: "POST", body: {} });
+          const r = await api("/api/admin/storage/test", { method: "POST", body: { type } });
           if (tmsg) { tmsg.style.color = r.ok ? "#23b26d" : "#f56c6c"; tmsg.textContent = (r.ok ? "✓ " : "✗ ") + r.msg; }
-          if (r.ok) toast("B2 连接正常，配置已保存");
+          if (r.ok) toast(`${type.toUpperCase()} 连接正常，配置已保存`);
         } catch (e) {
           if (tmsg) { tmsg.style.color = "#f56c6c"; tmsg.textContent = "✗ " + e.message; }
         } finally {
-          b2TestBtn.disabled = false;
+          btn.disabled = false;
         }
       });
-    }
+    });
 
   }
 

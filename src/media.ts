@@ -1,12 +1,13 @@
 /**
- * /media/* —— R2 / B2 私有桶对象的流式输出。
+ * /media/* —— 本地磁盘 / R2 / B2 私有桶对象的流式输出。
  * 支持 HTTP Range（MP4 拖拽必需）、不可变长缓存、扩展名兜底 MIME。
- * b2/ 前缀对象（Backblaze B2 私有桶）通过 SigV4 签名拉取代理。
+ * b2/、r2/ 前缀对象通过 SigV4 签名从对应 S3 兼容桶拉取代理，其余读本地磁盘。
  */
 import type { Context } from "hono";
 import { fail } from "./respond";
 import type { HonoEnv } from "./types";
-import { isB2Key, getB2Object } from "./storage";
+import { isB2Key, isRemoteR2Key, remoteCreds, getS3Object } from "./storage";
+import type { S3Creds } from "./storage";
 import { getSettings } from "./settings";
 
 const EXT_MIME: Record<string, string> = {
@@ -43,9 +44,9 @@ function resolveKey(pathname: string): string | null {
     return null;
   }
   if (!key || key.startsWith("/") || key.includes("..") || key.includes("\\")) return null;
-  // B2 私有桶代理：b2/ 前缀下只允许上传/头像目录
-  if (isB2Key(key)) {
-    const sub = key.slice("b2/".length);
+  // 远端桶（B2/R2）私有桶代理：b2/、r2/ 前缀下只允许上传/头像目录
+  if (isB2Key(key) || isRemoteR2Key(key)) {
+    const sub = key.slice(key.indexOf("/") + 1);
     if (sub.startsWith("uploads/") || sub.startsWith("avatars/")) return key;
     return null;
   }
@@ -86,8 +87,8 @@ export async function serveMedia(c: Context<HonoEnv>): Promise<Response> {
   const rangeHeader = c.req.header("range") ?? c.req.header("Range");
   const m = rangeHeader ? /^bytes=(\d*)-(\d*)$/.exec(rangeHeader.trim()) : null;
 
-  // B2 私有桶对象：SigV4 签名代理拉取（Range 原样透传，S3 支持）
-  if (isB2Key(key)) return serveB2Media(c, key, rangeHeader ?? undefined);
+  // 远端桶（B2/R2）私有对象：SigV4 签名代理拉取（Range 原样透传，S3 支持）
+  if (isB2Key(key) || isRemoteR2Key(key)) return serveRemoteMedia(c, key, rangeHeader ?? undefined);
 
   // 后缀范围 bytes=-N
   if (m && m[1] === "" && m[2] !== "") {
@@ -164,8 +165,8 @@ function rangeResponse(obj: R2ObjectBody, key: string): Response {
   return new Response(obj.body, { status: 206, headers });
 }
 
-/** B2 私有桶对象代理：SigV4 GET 拉流，无 Range 请求写边缘缓存减少 B2 访问 */
-async function serveB2Media(c: Context<HonoEnv>, key: string, range?: string): Promise<Response> {
+/** 远端桶（B2/R2）私有对象代理：SigV4 GET 拉流，无 Range 请求写缓存减少回源 */
+async function serveRemoteMedia(c: Context<HonoEnv>, key: string, range?: string): Promise<Response> {
   const cache = (caches as unknown as { default: Cache }).default;
   const cacheKey = new Request(c.req.url, { method: "GET" });
 
@@ -175,15 +176,17 @@ async function serveB2Media(c: Context<HonoEnv>, key: string, range?: string): P
   }
 
   const s = await getSettings(c.env.DB);
-  if (!(s.b2_endpoint && s.b2_bucket && s.b2_key_id && s.b2_app_key)) {
-    return fail(c, "B2 存储未配置，无法访问该资源", 502);
+  const label = isB2Key(key) ? "B2" : "R2";
+  const creds: S3Creds | null = remoteCreds(s, key);
+  if (!creds) {
+    return fail(c, `${label} 存储未配置，无法访问该资源`, 502);
   }
 
   let resp: Response | null;
   try {
-    resp = await getB2Object(s, key, range);
+    resp = await getS3Object(creds, key, range);
   } catch (e) {
-    return fail(c, "B2 读取失败：" + (e instanceof Error ? e.message : String(e)), 502);
+    return fail(c, `${creds.label} 读取失败：` + (e instanceof Error ? e.message : String(e)), 502);
   }
   if (!resp) return fail(c, "资源不存在", 404);
 
@@ -200,7 +203,7 @@ async function serveB2Media(c: Context<HonoEnv>, key: string, range?: string): P
   if (etag) headers.set("ETag", etag);
 
   const res = new Response(resp.body, { status: resp.status, headers });
-  // 整对象响应写入边缘缓存（206 不缓存）
+  // 整对象响应写入缓存（206 不缓存）
   if (resp.status === 200 && !range) {
     c.executionCtx.waitUntil(cache.put(cacheKey, res.clone()).catch(() => {}));
   }

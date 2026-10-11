@@ -6,7 +6,7 @@
  * - 头像缓存进 R2：站点 favicon（首页 <link rel=icon> → /favicon.ico）→ QQ 邮箱 qlogo
  */
 import { keyToSrc } from "./db";
-import { putObject } from "./storage";
+import { putObject, storagePrefix } from "./storage";
 import { getSettings, type SiteSettings } from "./settings";
 import type { HonoEnv } from "./types";
 
@@ -353,7 +353,7 @@ async function ensureFriendAvatar(env: Bindings, s: SiteSettings, f: FriendFeedR
     if (qq) img = await fetchImageBytes(`https://q1.qlogo.cn/g?b=qq&nk=${qq}&s=100`);
   }
   if (!img) return;
-  const prefix = s.storage_mode === "b2" ? "b2/friends/" : "friends/";
+  const prefix = `${storagePrefix(s.storage_mode)}friends/`;
   const key = `${prefix}${f.id}.${img.ext}`;
   try {
     await putObject(env.R2, s, key, img.bytes, img.type);

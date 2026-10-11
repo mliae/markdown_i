@@ -22,10 +22,10 @@ function inline(text: string, r2Domain?: string, b2Domain?: string): string {
   // 行内代码
   out = out.replace(/`([^`]+)`/g, (_m, code) => `<code>${code}</code>`);
   // 图片 ![alt](url) — 展示用缩略图，data-orig 供前端查看原图
-  // url 允许：http(s) 外链、/media/ 站内路径、uploads|b2/uploads 开头的裸 key（数据库统一存 key）
+  // url 允许：http(s) 外链、/media/ 站内路径、uploads|b2/uploads|r2/uploads 开头的裸 key（数据库统一存 key）
   out = out.replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+&quot;[^&]*?&quot;)?\)/g, (_m, alt, url) => {
     let safe = safeUrl(url);
-    if (!safe && /^(uploads|b2\/uploads)\//.test(url)) safe = keyToSrc(url, r2Domain, b2Domain);
+    if (!safe && /^(uploads|b2\/uploads|r2\/uploads)\//.test(url)) safe = keyToSrc(url, r2Domain, b2Domain);
     if (!safe) return alt;
     return `<img src="${thumbUrl(safe, r2Domain, b2Domain)}" alt="${alt}" loading="lazy" data-orig="${safe}" referrerpolicy="no-referrer" />`;
   });
@@ -68,7 +68,7 @@ function videoBlock(url: string, poster: string, defaultPoster = "", r2Domain?: 
   if (emb) {
     return `<div class="article-video"><div class="video-embed" data-embed-provider="${emb.provider}" data-embed-vid="${escapeHtml(emb.vid)}"></div></div>`;
   }
-  const safe = safeUrl(url) || (/^(uploads|b2\/uploads)\//.test(url) ? escapeHtml(keyToSrc(url, r2Domain, b2Domain)) : "");
+  const safe = safeUrl(url) || (/^(uploads|b2\/uploads|r2\/uploads)\//.test(url) ? escapeHtml(keyToSrc(url, r2Domain, b2Domain)) : "");
   if (!safe) return "";
   const resolvePoster = (p: string) => {
     if (!p) return "";
@@ -97,9 +97,9 @@ function safeUrl(url: string): string | null {
 
 /** 从原图 src 推导缩略图 URL（/media/ 或 R2/B2 直连域名路径插入 _w1200.jpg 后缀；外链/GIF 原样返回） */
 function thumbUrl(src: string, r2Domain?: string, b2Domain?: string): string {
-  // 裸 key（uploads/ / b2/uploads/ 开头）→ 先转直连或代理 URL（数据库已统一存 key）
+  // 裸 key（uploads/ / b2/uploads/ / r2/uploads/ 开头）→ 先转直连或代理 URL（数据库已统一存 key）
   let s = src;
-  if (/^(uploads|b2\/uploads)\//.test(s)) s = keyToSrc(s, r2Domain, b2Domain);
+  if (/^(uploads|b2\/uploads|r2\/uploads)\//.test(s)) s = keyToSrc(s, r2Domain, b2Domain);
   const r2Base = r2Domain ? r2Domain.replace(/\/$/, "") : "";
   const b2Base = b2Domain ? b2Domain.replace(/\/$/, "") : "";
   const isLocal =

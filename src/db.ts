@@ -473,7 +473,7 @@ export function parseVideos(raw: string | null | undefined): VideoRef[] {
 
 /** 本站图片/媒体 key → 可访问路径；外链原样返回。
  *  b2/ 前缀的 key 视为 B2 对象，使用 b2Domain 直连（否则回退 /media/）；
- *  其余 key 视为 R2 对象，r2Domain 有值时直连 R2 自定义域名（省 Worker 请求），否则走 /media/ 代理。 */
+ *  r2/ 前缀（远端 R2）与无前缀（本地磁盘）对象使用 r2Domain 直连，否则走 /media/ 代理。 */
 export function keyToSrc(keyOrUrl: string, r2Domain?: string, b2Domain?: string): string {
   if (/^https?:\/\//i.test(keyOrUrl)) return keyOrUrl;
   const encoded = keyOrUrl.split("/").map(encodeURIComponent).join("/");
@@ -496,7 +496,7 @@ export function srcToKey(src: string): string | null {
   }
 }
 
-/** 宽松提取本站媒体 key：/media/<key>、纯 uploads/ 或 b2/uploads/ key、R2/B2 直连完整 URL（host 必须匹配配置的 r2_domain / b2_domain）。
+/** 宽松提取本站媒体 key：/media/<key>、纯 uploads/、b2/uploads/、r2/uploads/ key、R2/B2 直连完整 URL（host 必须匹配配置的 r2_domain / b2_domain）。
  *  背景：配置 r2_domain/b2_domain 后上传接口返回直连 URL，前端原样提交，校验层需能提取 key。
  *  提取不到返回 null（视为外链或非法来源）。 */
 export function mediaKeyFrom(src: string, r2Domain?: string, b2Domain?: string): string | null {
@@ -504,15 +504,16 @@ export function mediaKeyFrom(src: string, r2Domain?: string, b2Domain?: string):
   if (src.startsWith("/media/")) return srcToKey(src);
   if (/^uploads\//.test(src)) return src;
   if (/^b2\/uploads\//.test(src)) return src;
+  if (/^r2\/uploads\//.test(src)) return src;
   if (/^https?:\/\//i.test(src)) {
     try {
       const u = new URL(src);
-      // R2 直连：host 匹配 r2_domain，路径必须 uploads/
+      // R2 直连：host 匹配 r2_domain，路径必须 uploads/ 或 r2/uploads/
       if (r2Domain) {
         try {
           if (u.host === new URL(r2Domain).host) {
             const p = decodeURIComponent(u.pathname).replace(/^\//, "");
-            return /^uploads\//.test(p) && !p.includes("..") && !p.includes("\\") ? p : null;
+            return /^(r2\/)?uploads\//.test(p) && !p.includes("..") && !p.includes("\\") ? p : null;
           }
         } catch { /* r2_domain 非法则忽略 */ }
       }

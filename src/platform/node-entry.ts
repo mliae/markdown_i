@@ -97,9 +97,31 @@ function withRealIp(req: Request): Request {
   return new Request(req.url, init);
 }
 
+/**
+ * 旧版本兼容迁移：早期 Node 版只有 r2/b2 两个选项，其中 storage_mode=r2 实际写本地磁盘。
+ * 引入 local/r2/b2 三模式后，新 r2 表示真正的 Cloudflare R2（必有 r2_endpoint），
+ * 因此把「r2 且未配置 R2 S3 端点」的历史数据一次性改为 local，旧文件路径不受影响（无前缀=本地）。
+ */
+async function migrateLegacySettings(db: Env["DB"]): Promise<void> {
+  const row = await db.prepare(`SELECT data FROM site_config WHERE id = 1`).first<{ data: string }>();
+  if (!row || !row.data) return;
+  let cfg: Record<string, unknown>;
+  try {
+    cfg = JSON.parse(row.data) as Record<string, unknown>;
+  } catch {
+    return;
+  }
+  if (cfg.storage_mode === "r2" && !cfg.r2_endpoint) {
+    cfg.storage_mode = "local";
+    await db.prepare(`UPDATE site_config SET data = ? WHERE id = 1`).bind(JSON.stringify(cfg)).run();
+    console.log("[migrate] storage_mode r2(本地磁盘) -> local");
+  }
+}
+
 // ---- 启动：建表 + HTTP 服务 + 定时任务 ----
 async function main(): Promise<void> {
   await ensureSchema(env.DB);
+  await migrateLegacySettings(env.DB);
 
   serve({
     fetch: (request: Request) => app.fetch(withRealIp(request), env, executionCtx),

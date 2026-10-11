@@ -4,7 +4,7 @@
  */
 import type { SiteSettings } from "./settings";
 import { keyToSrc } from "./db";
-import { headObject, putObject } from "./storage";
+import { headObject, putObject, storagePrefix } from "./storage";
 
 const MAX_BYTES = 5 * 1024 * 1024; // 单张头像上限 5MB
 
@@ -167,9 +167,9 @@ async function fetchAvatarImage(email: string, qq: string, s: SiteSettings): Pro
   return null;
 }
 
-/** 邮箱 → 头像文件名（不含扩展）；B2 模式自动加 b2/ 前缀便于路由与删除 */
-export function avatarBaseName(email: string, storageMode = "r2"): string {
-  const prefix = storageMode === "b2" ? "b2/avatars/" : "avatars/";
+/** 邮箱 → 头像文件名（不含扩展）；远端存储模式自动加 b2/、r2/ 前缀便于路由与删除 */
+export function avatarBaseName(email: string, storageMode = "local"): string {
+  const prefix = `${storagePrefix(storageMode)}avatars/`;
   return `${prefix}${md5hex(email.toLowerCase().trim())}`;
 }
 
@@ -216,8 +216,8 @@ export async function backfillMissingAvatars(
   db: D1Database,
   s: SiteSettings
 ): Promise<{ checked: number; fixed: number }> {
-  // B2 模式每条评论的 HEAD 探测也走外网子请求且占并发连接，批量更小；R2 绑定操作不计子请求
-  const limit = s.storage_mode === "b2" ? 3 : 5;
+  // 远端存储（B2/R2）每条评论的 HEAD 探测都走外网且占并发连接，批量更小；本地磁盘无此压力
+  const limit = s.storage_mode === "local" ? 5 : 3;
   const rows = await db
     .prepare(
       `SELECT id, email, qq FROM comments
@@ -247,11 +247,11 @@ export async function backfillMissingAvatars(
     if (src) fixed++;
   };
 
-  if (s.storage_mode === "b2") {
-    // B2 HEAD 探测占用外网并发连接（免费版同时仅 6 条），串行处理
+  if (s.storage_mode !== "local") {
+    // 远端桶 HEAD 探测占用外网并发连接（B2 免费版同时仅 6 条），串行处理
     for (const r of list) await handleOne(r);
   } else {
-    // R2 模式无外网并发压力，并发处理压缩耗时
+    // 本地磁盘无外网并发压力，并发处理压缩耗时
     await Promise.all(list.map(handleOne));
   }
 
