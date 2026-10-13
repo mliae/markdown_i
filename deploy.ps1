@@ -35,7 +35,7 @@ scp -i $key -o StrictHostKeyChecking=no -q -r src dist public package.json "${se
 
 # ---------- 4. 服务器端安装（index.html 最后覆盖，防 CDN 缓存污染）+ 重启 ----------
 Write-Host "[4/4] 安装并重启服务..." -ForegroundColor Cyan
-ssh -i $key $server "cd $remoteDir && cp -r $tmp/src/. src/ && cp -r $tmp/dist/. dist/ && cp $tmp/package.json . && cd $tmp/public && find . -type f ! -name index.html -exec cp --parents {} $remoteDir/public/ \; && cp index.html $remoteDir/public/index.html && rm -rf $tmp && (pm2 restart markdown_i 2>/dev/null || touch src/index.ts) && echo deployed"
+ssh -i $key $server "cd $remoteDir && cp -r $tmp/src/. src/ && cp -r $tmp/dist/. dist/ && cp $tmp/package.json . && cd $tmp/public && find . -type f ! -name index.html -exec cp --parents {} $remoteDir/public/ \; && cp index.html $remoteDir/public/index.html && rm -rf $tmp && systemctl restart markdown_i && echo deployed"
 
 Write-Host ""
 Write-Host "完成：GitHub 已备份，服务器已更新" -ForegroundColor Green
