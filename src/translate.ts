@@ -1,7 +1,7 @@
 /**
  * 内容翻译：
  * - zh-CN → zh-TW：本地简繁转换（词组表 + 单字表），零成本零延迟
- * - zh-CN → en：Workers AI 翻译，Markdown 分块、代码/URL 原样保留
+ * - zh-CN → en：AI 接口翻译，Markdown 分块、代码/URL 原样保留
  */
 import { S2T_CHARS } from "./s2t-table";
 import { generateText, TEXT_MODEL, TEXT_MODEL_FALLBACK, type AiBinding } from "./ai";
@@ -101,7 +101,7 @@ export function toTraditional(input: string): string {
   return restoreCode(buf, slots);
 }
 
-/* ================= 简体中文 → 英语（Workers AI） ================= */
+/* ================= 简体中文 → 英语（AI 接口） ================= */
 
 /** 保护代码块/行内代码用的占位符。
  * 实测百度通用翻译会把 @/_ 类符号拆改（@ @ XCODE0 @ @），

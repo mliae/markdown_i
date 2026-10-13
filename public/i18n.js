@@ -331,6 +331,8 @@
       "comment.select_target_first": "请先选择评论对象",
       "comment.nickname_required": "请填写昵称",
       "comment.email_required": "请填写邮箱",
+      "comment.submitting": "正在提交…",
+      "comment.submit_success": "评论已发布",
       "comment.ai_called": "已召唤 {name}，回复稍后自动出现",
 
       // 音乐播放器
@@ -700,6 +702,8 @@
       "comment.select_target_first": "請先選擇留言對象",
       "comment.nickname_required": "請填寫暱稱",
       "comment.email_required": "請填寫信箱",
+      "comment.submitting": "正在提交…",
+      "comment.submit_success": "留言已發布",
       "comment.ai_called": "已召喚 {name}，回覆稍後自動出現",
 
       "music.not_playing": "未播放",
@@ -1065,7 +1069,9 @@
       "comment.select_target_first": "Please pick a comment to reply to first",
       "comment.nickname_required": "Please enter a nickname",
       "comment.email_required": "Please enter your email",
-      "comment.ai_called": "{name} summoned \u2014 the reply will appear shortly",
+      "comment.submitting": "Submitting…",
+      "comment.submit_success": "Comment posted",
+      "comment.ai_called": "{name} summoned — the reply will appear shortly",
 
       "music.not_playing": "Not playing",
       "music.click_play": "Tap to play",

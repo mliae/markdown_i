@@ -10,16 +10,13 @@ import type { HonoEnv } from "../types";
 import { requireAdmin } from "../auth";
 import { getSettings } from "../settings";
 import { pingIndexNow, getIndexNowLog } from "../indexnow";
+import { sanitizeOrigin } from "../seo";
 
 const app = new Hono<HonoEnv>();
 app.use("*", requireAdmin);
 
 function originOf(c: Context): string {
-  try {
-    return new URL(c.req.url).origin;
-  } catch {
-    return "";
-  }
+  return sanitizeOrigin(c.req.url, c.req.header("x-forwarded-proto"));
 }
 
 app.get("/log", async c => {

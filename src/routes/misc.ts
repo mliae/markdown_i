@@ -10,6 +10,7 @@ import { getSettings } from "../settings";
 import type { SiteSettings } from "../settings";
 import { keyToSrc } from "../db";
 import { ensureAvatar } from "../avatar";
+import { sanitizeOrigin } from "../seo";
 import { putObject, storagePrefix } from "../storage";
 
 const app = new Hono<HonoEnv>();
@@ -311,7 +312,7 @@ app.get("/geo/reverse", async c => {
       `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}&zoom=16&accept-language=zh-CN`,
       {
         signal: ctrl.signal,
-        headers: { "User-Agent": UA, Referer: new URL(c.req.url).origin + "/" },
+        headers: { "User-Agent": UA, Referer: sanitizeOrigin(c.req.url, c.req.header("x-forwarded-proto")) + "/" },
       }
     );
     if (!resp.ok) throw new Error("geo http " + resp.status);
@@ -331,20 +332,6 @@ app.get("/geo/reverse", async c => {
   } finally {
     clearTimeout(timer);
   }
-});
-
-/** IP 定位兜底：Cloudflare 边缘自带客户端 IP 地理数据（城市级，无需外部服务与代理） */
-app.get("/geo/ip", c => {
-  const cf = (c.req.raw as Request & { cf?: Record<string, string | undefined> }).cf;
-  const lat = cf?.latitude != null ? Number(cf.latitude) : NaN;
-  const lon = cf?.longitude != null ? Number(cf.longitude) : NaN;
-  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return fail(c, "IP 定位不可用", 502);
-  return ok(c, {
-    latitude: lat,
-    longitude: lon,
-    city: cf?.city || cf?.region || "",
-    country: cf?.country || ""
-  });
 });
 
 export default app;

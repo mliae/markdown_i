@@ -1,18 +1,18 @@
 /**
- * Cloudflare Workers AI 文本生成封装（评论 @AI 回复用）
- * 绑定：wrangler.jsonc 中 ai.binding = "AI"
- * 模型均为 Cloudflare 自托管的免费 @cf/* 模型，消耗每日免费 neurons 额度。
+ * AI 文本生成封装（评论 @AI 回复 / 翻译回退用）
+ * AiBinding 为最小绑定接口，Node 下由 platform/ai-openai.ts 的 OpenAI 兼容适配器实现；
+ * 实际模型由 .env 的 AI_MODEL 决定，后台「自定义文本模型」可按次覆盖。
  */
 
-/** Workers AI 绑定最小类型 */
+/** AI 绑定最小类型 */
 export interface AiBinding {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   run(model: string, inputs: any): Promise<any>;
 }
 
 /**
- * 默认文本模型：中文友好的 Cloudflare 托管免费模型。
- * 旧的 @cf/meta/llama-3-8b-instruct 已下架，勿再使用。
+ * 内置模型 ID 兜底值（仅业务未显式指定模型时传给绑定实现；
+ * Node 下 OpenAI 兼容适配器以 AI_MODEL 配置为准，此值仅作占位）。
  */
 export const TEXT_MODEL = "@cf/qwen/qwen3-30b-a3b-fp8";
 /** 备用模型：主模型上游偶发错误时重试一次 */
@@ -49,7 +49,7 @@ export async function generateText(
   return stripThinking(extractText(result)).trim();
 }
 
-/** 兼容多种 Workers AI 文本返回结构：
+/** 兼容多种文本返回结构：
  *  {response} / {result:{response}} / OpenAI chat.completion / Qwen3 reasoning_content 兜底 */
 function extractText(result: unknown): string {
   if (typeof result === "string") return result;

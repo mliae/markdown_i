@@ -69,7 +69,7 @@ async function lookupGeo(db: D1Database, ip: string, cfCountry: string): Promise
     const t = setTimeout(() => ctrl.abort(), 2500);
     const res = await fetch(
       `http://ip-api.com/json/${encodeURIComponent(ip)}?fields=status,country,regionName,city,isp,query&lang=zh-CN`,
-      { signal: ctrl.signal, headers: { "User-Agent": "moments-analytics/1.0" } }
+      { signal: ctrl.signal, headers: { "User-Agent": "markdown-i-analytics/1.0" } }
     );
     clearTimeout(t);
     if (res.ok) {

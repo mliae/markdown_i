@@ -1,8 +1,8 @@
 /** D1 数据访问助手：行类型、序列化与聚合查询（原生 prepared statements，无 ORM） */
 
 /* ==================== 自动建表（一键部署） ====================
- * Cloudflare 自动资源 provisioning 只创建空 D1 库，不跑 migrations。
- * 首次请求时检测 moments 表是否存在，不存在则一次性执行完整 schema
+ * 全新部署时 data/ 下是空库（没有任何表）。
+ * 启动时检测 moments 表是否存在，不存在则一次性执行完整 schema
  * （合并 migrations/0001-0011 的最终状态，全部 CREATE IF NOT EXISTS，幂等）。
  * 已有库不受影响（表已存在时跳过）。
  */
@@ -334,7 +334,7 @@ async function ensureIncremental(db: D1Database): Promise<void> {
 }
 
 /**
- * 幂等建表：首次请求时检测 moments 表是否存在，不存在则执行完整 schema。
+ * 幂等建表：启动时检测 moments 表是否存在，不存在则执行完整 schema。
  * 模块级 Promise 缓存，同一 Worker 隔离体内只跑一次；失败重置以便下次重试。
  * 老库的增量升级（新增列/表）走 ensureIncremental，每次首个请求幂等执行。
  */
@@ -375,7 +375,7 @@ export interface CommentRow {
   nickname: string;
   content: string;
   is_owner: number;
-  is_ai?: number; // 1 = Workers AI 机器人自动回复
+  is_ai?: number; // 1 = AI 机器人自动回复
   created_at: string;
   qq?: string;
   email?: string;

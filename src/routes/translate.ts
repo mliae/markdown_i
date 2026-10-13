@@ -3,7 +3,7 @@
  * 公开：POST /api/translate  { type: post|moment|about, id, lang: zh-TW|en }
  * - 只收内容 ID，不收自由文本，防止被当作免费翻译 API 盗用
  * - 译文按原文哈希永久缓存（content_translations），原文更新自动重译
- * - 同 IP 60 秒窗口限频；简繁本地转换，英文走 Workers AI
+ * - 同 IP 60 秒窗口限频；简繁本地转换，英文走 AI 接口
  */
 import { Hono } from "hono";
 import { ok, fail } from "../respond";
@@ -141,7 +141,7 @@ app.post("/", async c => {
         outContent = toTraditional(content);
       }
     } else {
-      // 英文：优先百度翻译（国内直连、快且稳），任一失败回退 Workers AI
+      // 英文：优先百度翻译（国内直连、快且稳），任一失败回退 AI 接口
       const hasBaidu = !!(s.baidu_translate_appid && s.baidu_translate_key);
       engine = hasBaidu ? "baidu" : "ai";
       /**
@@ -156,7 +156,7 @@ app.post("/", async c => {
           try {
             return await baiduToEnglish(s.baidu_translate_appid, s.baidu_translate_key, text);
           } catch (e) {
-            console.warn("[translate] baidu failed, fallback to Workers AI:", e instanceof Error ? e.message : e);
+            console.warn("[translate] baidu failed, fallback to AI:", e instanceof Error ? e.message : e);
             engine = "ai";
           }
         }

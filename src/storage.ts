@@ -257,7 +257,7 @@ export function remoteCreds(s: SiteSettings, key: string): S3Creds | null {
 
 /** 测试 S3 兼容存储：写入并删除一个探针对象，验证凭证/桶/读写权限 */
 async function testS3Storage(creds: S3Creds, prefix: string): Promise<{ ok: boolean; msg: string }> {
-  const key = `${prefix}.moments-test-${crypto.randomUUID()}`;
+  const key = `${prefix}.markdown-i-test-${crypto.randomUUID()}`;
   try {
     const put = await s3Fetch(creds, "PUT", key, "ok", "text/plain");
     if (!put.ok) {

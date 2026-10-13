@@ -62,7 +62,7 @@ export const SITE_LOGO_KEY = "site/logo.png";
 
 /**
  * /logo.png —— 站点 Logo 固定短链输出（favicon/品牌头像/友链头像等外部引用用）。
- * Logo 可能更换，不用 immutable：浏览器 1h + 边缘 1 天，ETag 兜底协商缓存。
+ * Logo 可能更换，不用 immutable：浏览器 1h + 进程内缓存，ETag 兜底协商缓存。
  */
 export async function serveSiteLogo(c: Context<HonoEnv>): Promise<Response> {
   const cache = (caches as unknown as { default: Cache }).default;
@@ -116,7 +116,7 @@ export async function serveMedia(c: Context<HonoEnv>): Promise<Response> {
     return rangeResponse(obj, key);
   }
 
-  // 无 Range：整对象 —— 先查 Cloudflare 边缘缓存（命中不调用 Worker，节省请求额度）
+  // 无 Range：整对象 —— 先查进程内缓存（命中即回，不读磁盘/不回源桶）
   const cache = (caches as unknown as { default: Cache }).default;
   const cacheKey = new Request(c.req.url, { method: "GET" });
   const hit = await cache.match(cacheKey);
@@ -127,7 +127,7 @@ export async function serveMedia(c: Context<HonoEnv>): Promise<Response> {
   const headers = baseHeaders(obj, key);
   headers.set("Content-Length", String(obj.size));
   const res = new Response(obj.body, { status: 200, headers });
-  // R2 响应体只能读一次，clone 后异步写入边缘缓存
+  // 对象流只能读一次，clone 后异步写入进程内缓存
   c.executionCtx.waitUntil(cache.put(cacheKey, res.clone()));
   return res;
 }

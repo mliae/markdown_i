@@ -19,7 +19,7 @@ export interface SiteSettings {
   music_collapsed: boolean; // 初始折叠成球形
   music_volume: string; // 初始音量 0-1
   // 中央音乐服务（music-api）
-  music_api_url: string; // 中央音乐解析服务地址（如 https://music-api.xxx.workers.dev）；留空=音乐库功能不可用
+  music_api_url: string; // 中央音乐解析服务地址（如 https://music-api.example.com）；留空=音乐库功能不可用
   music_api_key: string; // 中央音乐服务 ApiKey（私密，不公开）
   // 品牌 / 作者
   brand_avatar: string; // 顶栏品牌头像（仅图片 URL；空=lucide 占位图标）
@@ -83,10 +83,10 @@ export interface SiteSettings {
   b2_app_key: string; // B2 Application Key（私密，不公开）
   b2_domain: string; // B2 公开访问域名（带 https://，如 https://b2.e.jce.me）；B2 桶需设为公开
   // AI 评论机器人
-  ai_reply_enabled: boolean; // 是否启用评论 @AI 自动回复（Workers AI，消耗每日免费额度）
+  ai_reply_enabled: boolean; // 是否启用评论 @AI 自动回复（需在 .env 配置 AI 接口）
   ai_bot_name: string; // 机器人昵称（评论中 @此昵称 触发回复），默认「小J」
   ai_bot_avatar: string; // 机器人头像：仅图片 URL；空=lucide bot 占位图标
-  ai_text_model: string; // 自定义文本模型 ID（@cf/...）；留空=内置默认模型
+  ai_text_model: string; // 自定义文本模型 ID；留空=内置默认模型
   // QQ 昵称 API
   qq_nick_mode: string; // QQ 昵称获取方式：direct=腾讯直连 / apihz=apihz 接口 / fallback=逐个尝试（先腾讯后 apihz）
   apihz_id: string; // apihz 开发者 ID，留空=使用内置默认（88888888）
@@ -149,7 +149,7 @@ export interface SiteSettings {
   i18n_langs: string; // 开放语言，逗号分隔（如 zh-CN,zh-TW,en）；至少包含默认语言
   i18n_auto_detect: boolean; // 首次访问是否按访问地/浏览器语言自动判定
   i18n_content_translate: boolean; // 是否自动翻译说说/文章等动态内容（P2，预留开关）
-  baidu_translate_appid: string; // 百度翻译开放平台 APP ID（私密）；留空=英文翻译仅走 Workers AI
+  baidu_translate_appid: string; // 百度翻译开放平台 APP ID（私密）；留空=英文翻译仅走 AI 接口
   baidu_translate_key: string; // 百度翻译密钥（私密）
 }
 
@@ -394,7 +394,7 @@ const STRING_LIMITS: Partial<Record<keyof SiteSettings, number>> = {
 
 /**
  * 校验后台入口路径：默认 /admin，或任意单段秘密路径（如 /my-secret）。
- * 任意路径的硬加载由 wrangler.jsonc run_worker_first 的 /* 兜底到 Worker，
+ * 任意路径的硬加载都进入本应用（未注册路由落到 notFound），
  * 在 index.ts notFound 中比对 admin_path 后注入 SSR 信号。
  */
 export function normalizeAdminPath(raw: unknown): string | null {

@@ -1,5 +1,5 @@
 /**
- * Workers AI 绑定的 OpenAI 兼容替代实现（DeepSeek / 通义千问 / vLLM 等）
+ * AI 绑定的 OpenAI 兼容实现（DeepSeek / 通义千问 / vLLM 等）
  * 业务侧 ai.ts 只调用 ai.run(model, { messages, max_tokens, temperature })，
  * 并已兼容 OpenAI chat.completion 返回结构，故这里直接转发 /chat/completions。
  * 未配置 AI_BASE_URL/AI_API_KEY 时不创建实例，业务按 !env.AI 自动禁用功能。

@@ -140,10 +140,13 @@ export async function isAdmin(c: Context<HonoEnv>): Promise<boolean> {
 }
 
 export function setAdminCookie(c: Context<HonoEnv>, token: string): void {
+  // 反代（宝塔 Nginx）下 TLS 在代理终结，请求 URL 是 http://host:443 —— 按转发头/端口判定 https
+  const u = new URL(c.req.url);
+  const fwdProto = (c.req.header("x-forwarded-proto") || "").split(",")[0].trim().toLowerCase();
   setCookie(c, ADMIN_COOKIE, token, {
     httpOnly: true,
     sameSite: "Lax",
-    secure: new URL(c.req.url).protocol === "https:",
+    secure: u.protocol === "https:" || u.port === "443" || fwdProto === "https",
     path: "/",
     maxAge: MAX_AGE_SEC,
   });

@@ -183,7 +183,7 @@ app.get("/backup/export", requireAdmin, async c => {
     status: 200,
     headers: {
       "content-type": "application/json; charset=utf-8",
-      "content-disposition": `attachment; filename="moments-backup-${date}.json"`,
+      "content-disposition": `attachment; filename="markdown-i-backup-${date}.json"`,
       "cache-control": "no-store",
     },
   });
@@ -202,7 +202,7 @@ app.post("/backup/restore", requireAdmin, async c => {
   if (!table || !rows.length || rows.length > BACKUP_MAX_ROWS) {
     return fail(c, "请提供要恢复的表且行数为 1-10000", 400);
   }
-  // 表名必须存在于用户表中（排除 sqlite_*、Cloudflare 内部表与 D1 迁移表）
+  // 表名必须存在于用户表中（排除 sqlite_*、系统内部表与迁移表）
   const safeTable = table.replace(/"/g, '""');
   const tbl = await c.env.DB.prepare(
     `SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' AND name NOT LIKE 'd1_migrations' AND name = ?`

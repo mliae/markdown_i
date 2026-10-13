@@ -457,7 +457,7 @@ app.get("/track", async c => {
 });
 
 /** 胶囊播放器歌单（公开）：GET /api/music/playlist.json[?tag=xxx]
- *  中央服务返回纯数组（非信封），原样透传并保留边缘缓存头 */
+ *  中央服务返回纯数组（非信封），原样透传并保留缓存头 */
 app.get("/playlist.json", async c => {
   const cfg = await musicApiCfg(c);
   if (!cfg) return c.json([]); // 未配置时返回空歌单，避免前台播放器报错

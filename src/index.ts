@@ -1,10 +1,11 @@
 /**
- * moments Worker 入口
+ * Markdown-i 应用入口（Hono app，Node 自托管）
  * - /api/*   Hono API（动态/文章/社交/管理）
- * - /media/* R2 对象流式输出（Range）
+ * - /media/* 本地磁盘 / R2 / B2 对象流式输出（Range）
  * - HTML 路由（/ /posts /post/:slug /photos /admin）：SSR 注入 SEO meta/JSON-LD/文章正文
  * - robots.txt / sitemap.xml / rss.xml
- * - 其余     静态资源由 wrangler assets 服务；SPA 深链兜底 index.html
+ * - 其余     静态资源由 ASSETS（public/）服务；SPA 深链兜底 index.html
+ * 运行时依赖 src/platform/* 提供的同构垫片（SQLite D1 / 本地磁盘 R2 / 内存 caches / ExecutionContext）。
  */
 import { Hono } from "hono";
 import type { Context } from "hono";
@@ -29,7 +30,7 @@ import { analyticsPublicRoutes, analyticsAdminRoutes } from "./routes/analytics"
 import opsRoutes, { runUptimeCheck, recordPerf } from "./routes/ops";
 import { getSettings } from "./settings";
 import { detectLang, parseLangs } from "./i18n";
-import { keyToSrc, ensureSchema, type PostRow } from "./db";
+import { keyToSrc, ensureSchema, queryFeed, type PostRow } from "./db";
 import { isAdmin, hasAdminPassword, ADMIN_COOKIE } from "./auth";
 import { detectAttack, isBlocked, recordAttack, recordError } from "./security";
 import {
@@ -42,7 +43,11 @@ import {
   robotsTxt,
   sitemapXml,
   rssXml,
+  renderPostsSsr,
+  renderFeedSsr,
+  renderAboutSsr,
   absoluteUrl,
+  canonicalOrigin,
 } from "./seo";
 
 const app = new Hono<HonoEnv>();
@@ -50,7 +55,7 @@ const app = new Hono<HonoEnv>();
 /* ==================== 性能监控 ====================
  * 仅统计 /api/* 请求总耗时，异步采样写入 perf_log：
  * - 耗时 ≥ 300ms 的慢请求必记（用于发现劣化接口）
- * - 其余请求以 10% 概率采样（控制 D1 写入量，避免浪费免费额度）
+ * - 其余请求以 10% 概率采样（控制 SQLite 写入量）
  *
  * 注意：ensureSchema 已从全局中间件移出，只在 cron（/__scheduled）和 admin/setup 调用。
  * 现网 schema 一旦建好就一直存在，冷启动不再拖慢首个请求。
@@ -70,47 +75,12 @@ app.use("*", async (c, next) => {
   }
 });
 
-/* ==================== 规范域名跳转 ====================
- * 保证 http→https、www→非 www 全部 301 到后台 site_domain 指定的规范主机，
- * 保留原路径与查询串（SEO 友好 + Cookie/资源同源一致）。
- * 快速路径：已是 https 且非 www 前缀时直接放行，不查 D1，零额外开销。
- * workers.dev 调试子域不参与规范化。
- */
-app.use("*", async (c, next) => {
-  // 本地 wrangler dev（workerd 本地运行，无 CF 边缘注入的 cf-ray 头）直接放行：
-  // 配置了 routes 时 wrangler dev 会把请求 URL 改写成路由域名，回环判断失效；
-  // 此时若 301 到 https://域名，wrangler 出口又把 Location 改写回本地源，形成自跳转死循环。
-  // 生产流量必经 CF 边缘（必然携带 cf-ray），不受影响。
-  if (!c.req.header("cf-ray")) return next();
-  const url = new URL(c.req.url);
-  const host = url.host.toLowerCase();
-  // 回环地址兜底（无 routes 配置的裸 wrangler dev 场景）
-  if (host.startsWith("127.0.0.1:") || host.startsWith("localhost:") || host === "localhost" || host.startsWith("[::1]")) return next();
-  if (url.protocol === "https:" && !host.startsWith("www.")) return next();
-  const s = await getSettings(c.env.DB);
-  let canonical: string | null = null;
-  if (s.site_domain) {
-    try {
-      canonical = new URL(s.site_domain).host.toLowerCase();
-    } catch {
-      canonical = null;
-    }
-  }
-  // 未配置规范域或访问的是 workers.dev 调试子域：只做 http→https，不动主机名
-  const targetHost = canonical && !host.endsWith(".workers.dev") ? canonical : host;
-  const needsRedirect = url.protocol !== "https:" || host !== targetHost;
-  if (!needsRedirect) return next();
-  const dest = `https://${targetHost}${url.pathname}${url.search}`;
-  const status = c.req.method === "GET" || c.req.method === "HEAD" ? 301 : 308;
-  return c.redirect(dest, status);
-});
-
-/* ==================== SSR 页面边缘缓存 ====================
- * 匿名访客的 HTML 走边缘缓存：命中即不跑 Worker / 不查 D1，TTFB 从秒级降到毫秒级。
+/* ==================== SSR 页面内存缓存 ====================
+ * 匿名访客的 HTML 走进程内缓存（caches 垫片）：命中即不查库，TTFB 显著降低。
  * - 仅 GET、HTML、且未带管理员 cookie 时缓存（管理员永远取最新，避免后台改动被缓存）。
- * - 发布/改动后最长 ~2 分钟生效；浏览器 1 分钟、边缘 2 分钟、并允许 stale-while-revalidate。
+ * - 发布/改动后最长 ~2 分钟生效；浏览器 1 分钟、进程缓存 2 分钟、并允许 stale-while-revalidate。
  */
-const SSR_CACHE_EXACT = new Set(["/", "/posts", "/photos", "/links", "/links/apply"]);
+const SSR_CACHE_EXACT = new Set(["/", "/posts", "/photos", "/links", "/links/apply", "/about"]);
 const isSsrCachePath = (pathname: string) => SSR_CACHE_EXACT.has(pathname) || /^\/post\/[^/]+$/.test(pathname);
 app.use("*", async (c, next) => {
   if (c.req.method !== "GET" && c.req.method !== "HEAD") return next();
@@ -120,7 +90,7 @@ app.use("*", async (c, next) => {
   const cache = (caches as unknown as { default: Cache }).default;
   const key = new Request(c.req.url);
   const hit = await cache.match(key);
-  if (hit) return hit; // 边缘命中，直接返回
+  if (hit) return hit; // 缓存命中，直接返回
   await next();
   if (c.res.status === 200 && (c.res.headers.get("content-type") || "").includes("text/html")) {
     c.res.headers.set("cache-control", "public, max-age=60, s-maxage=120, stale-while-revalidate=600");
@@ -196,10 +166,10 @@ app.use("*", async (c, next) => {
   return next();
 });
 
-app.get("/api/health", c => ok(c, { site: c.env.SITE_NAME ?? "moments", time: new Date().toISOString() }));
+app.get("/api/health", c => ok(c, { site: c.env.SITE_NAME ?? "Markdown-i", time: new Date().toISOString() }));
 
 // 公开站点配置（横幅文案/站名等）；admin_path 等敏感字段不下发
-// 设置变更频率低：浏览器缓存 60s + Cloudflare 边缘缓存 5min（边缘命中不消耗 Worker 请求额度）
+// 设置变更频率低：浏览器缓存 60s（s-maxage 供前置 CDN 使用，直连场景忽略）
 app.get("/api/settings", async c => {
   const s = await getSettings(c.env.DB);
   // 私密字段绝不下发：后台入口、apihz 凭证、百度翻译凭证、QQ 登录态、邮件 API Key、告警 Webhook、B2/R2 存储凭证
@@ -217,7 +187,7 @@ app.get("/api/settings", async c => {
 });
 
 // 当前语言判定（访客侧）：cookie > 访问地 > Accept-Language > 默认语言。
-// 结果因人而异（cookie/地理），严禁边缘缓存。
+// 结果因人而异（cookie/地理），严禁 CDN/代理缓存。
 app.get("/api/i18n/detect", async c => {
   const s = await getSettings(c.env.DB);
   const lang = detectLang(s, {
@@ -260,8 +230,8 @@ app.get("/media/*", serveMedia);
 
 /* ==================== 外链图片反向代理 ====================
  * 部分图床/资源站域名在国内网络被 TLS 阻断（DNS 正常但握手失败），
- * 浏览器直连封面永远加载失败。由 Worker 在 Cloudflare 网络内回源取图，
- * 浏览器只访问自家域名；边缘缓存 7 天，回源一次后几乎零成本。
+ * 浏览器直连封面永远加载失败。由服务器回源取图，浏览器只访问自家域名；
+ * 进程内缓存 7 天，回源一次后几乎零成本。
  * 安全：仅 http(s)、拦截内网字面量地址、只回 image/*、上限 15MB。
  */
 const MAX_IMG_PROXY = 15 * 1024 * 1024;
@@ -289,13 +259,16 @@ app.get("/imgproxy", async c => {
   const raw = c.req.query("u");
   if (!raw) return c.text("missing u", 400);
   // 防盗用：只接受页面内 <img> 请求（Sec-Fetch-Dest: image）或同源 Referer/Origin，
-  // 阻止第三方把本 Worker 当开放图床代理刷请求额度。旧浏览器无 Sec-Fetch 头时
+  // 阻止第三方把本服务当开放图床代理刷流量。旧浏览器无 Sec-Fetch 头时
   // 一般会带 Referer，三者全缺才拒绝。
-  const selfHost = new URL(c.req.url).host;
+  // 同源比较：反代下自站 host 可能带默认端口（如 ymao.me:443），而浏览器 Referer/Origin 不带
+  // —— 两侧都剥掉默认端口再比，避免同源请求被误判 403
+  const normHost = (h: string) => h.replace(/:443$/, "").replace(/:80$/, "");
+  const selfHost = normHost(new URL(c.req.url).host);
   const fetchDest = c.req.header("sec-fetch-dest") || "";
   const referer = c.req.header("referer") || "";
   const origin = c.req.header("origin") || "";
-  const hostOf = (s: string) => { try { return new URL(s).host; } catch { return ""; } };
+  const hostOf = (s: string) => { try { return normHost(new URL(s).host); } catch { return ""; } };
   const sameOrigin = hostOf(referer) === selfHost || hostOf(origin) === selfHost;
   if (fetchDest !== "image" && !sameOrigin) return c.text("forbidden", 403);
 
@@ -322,7 +295,6 @@ app.get("/imgproxy", async c => {
         Referer: target.origin + "/",
         Accept: "image/avif,image/webp,image/*,*/*;q=0.8",
       },
-      cf: { cacheTtl: 604800, cacheEverything: true },
     });
   } catch {
     return c.text("upstream fetch failed", 502);
@@ -361,19 +333,21 @@ async function publishedPosts(db: D1Database, limit = 500): Promise<PostRow[]> {
 }
 
 app.get("/robots.txt", async c => {
-  const origin = new URL(c.req.url).origin;
+  const s = await getSettings(c.env.DB);
+  const origin = canonicalOrigin(s.site_domain, c.req.url, c.req.header("x-forwarded-proto"));
   return c.text(robotsTxt(origin), 200, { "content-type": "text/plain; charset=utf-8" });
 });
 
 app.get("/sitemap.xml", async c => {
-  const origin = new URL(c.req.url).origin;
+  const s = await getSettings(c.env.DB);
+  const origin = canonicalOrigin(s.site_domain, c.req.url, c.req.header("x-forwarded-proto"));
   const posts = await publishedPosts(c.env.DB);
   return c.text(sitemapXml(origin, posts), 200, { "content-type": "application/xml; charset=utf-8" });
 });
 
 app.get("/rss.xml", async c => {
-  const origin = new URL(c.req.url).origin;
   const s = await getSettings(c.env.DB);
+  const origin = canonicalOrigin(s.site_domain, c.req.url, c.req.header("x-forwarded-proto"));
   const posts = await publishedPosts(c.env.DB, 50);
   return c.text(rssXml(origin, s, posts), 200, {
     "content-type": "application/rss+xml; charset=utf-8",
@@ -382,8 +356,8 @@ app.get("/rss.xml", async c => {
 
 // /feed 作为 RSS 订阅源别名（通用惯例），与 /rss.xml 输出一致
 app.get("/feed", async c => {
-  const origin = new URL(c.req.url).origin;
   const s = await getSettings(c.env.DB);
+  const origin = canonicalOrigin(s.site_domain, c.req.url, c.req.header("x-forwarded-proto"));
   const posts = await publishedPosts(c.env.DB, 50);
   return c.text(rssXml(origin, s, posts), 200, {
     "content-type": "application/rss+xml; charset=utf-8",
@@ -446,7 +420,21 @@ async function serveSsr(
     default: s.i18n_default,
     langs: parseLangs(s),
   })};<\/script>`;
+  // 首帧直出：SSR 阶段替换顶栏品牌名/导航文字/头像（后台设置实时生效），
+  // 消除「首次访问先显示默认 Markdown-i，设置加载后才变成实际值」的闪现
+  const escT = (t: string) =>
+    t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const navName = escT(s.nav_feeds_name || "首页");
   const out = html
+    .replace('<span class="brand-name">Markdown-i</span>', () => `<span class="brand-name">${escT(s.site_title || "Markdown-i")}</span>`)
+    .replace('<a href="/" data-route="feed">首页</a>', () => `<a href="/" data-route="feed">${navName}</a>`)
+    .replace(/(<a href="\/" data-route="feed">[\s\S]*?<\/svg>\s*)<span>首页<\/span>/, (_m, p1: string) => `${p1}<span>${navName}</span>`)
+    .replace(/<span class="brand-avatar">[\s\S]*?<\/span>/, (m: string) => {
+      const av = (s.brand_avatar || "").trim();
+      return /^https?:\/\//i.test(av) || av.startsWith("/")
+        ? `<span class="brand-avatar"><img src="${escT(av)}" alt="" referrerpolicy="no-referrer" /></span>`
+        : m;
+    })
     .replace(TITLE_TAG, () => `<title>${opts.title}</title>`)
     .replace(DESC_TAG, () => `<meta name="description" content="${opts.description}" />`)
     .replace(ICON_RE, () => {
@@ -468,7 +456,7 @@ async function serveSsr(
 
 app.get("/", async c => {
   const s = await getSettings(c.env.DB);
-  const origin = new URL(c.req.url).origin;
+  const origin = canonicalOrigin(s.site_domain, c.req.url, c.req.header("x-forwarded-proto"));
   const html = await getIndexHtml(c);
   const image = s.banner_bg_mode === "random"
     ? absoluteUrl(origin, "/api/bg", s.site_domain)
@@ -485,12 +473,19 @@ app.get("/", async c => {
     siteName: s.site_title,
     jsonLd: websiteJsonLd(origin, s),
   });
-  return serveSsr(c, html, { title: s.site_title, description: s.essay_subtitle, head });
+  const q = (c.req.query("q") || "").trim();
+  const feed = await queryFeed(c.env.DB, {
+    limit: Number(s.feed_page_size) || 20,
+    r2Domain: s.r2_domain,
+    b2Domain: s.b2_domain,
+    q,
+  });
+  return serveSsr(c, html, { title: s.site_title, description: s.essay_subtitle, head, body: renderFeedSsr(feed.list, s) });
 });
 
 app.get("/posts", async c => {
   const s = await getSettings(c.env.DB);
-  const origin = new URL(c.req.url).origin;
+  const origin = canonicalOrigin(s.site_domain, c.req.url, c.req.header("x-forwarded-proto"));
   const posts = await publishedPosts(c.env.DB);
   const title = `文章 · ${s.site_title}`;
   const description = `${s.site_title} 的全部文章，共 ${posts.length} 篇`;
@@ -502,12 +497,36 @@ app.get("/posts", async c => {
     jsonLd: blogJsonLd(origin, s, posts),
   });
   const html = await getIndexHtml(c);
-  return serveSsr(c, html, { title, description, head });
+  return serveSsr(c, html, { title, description, head, body: renderPostsSsr(posts, s.r2_domain, s.b2_domain) });
+});
+
+app.get("/about", async c => {
+  const s = await getSettings(c.env.DB);
+  const origin = canonicalOrigin(s.site_domain, c.req.url, c.req.header("x-forwarded-proto"));
+  const title = `关于 · ${s.site_title}`;
+  const description = s.about_signature || s.about_greeting_sub || s.essay_subtitle;
+  const image = (s.about_avatar || s.author_avatar || s.brand_avatar || "").trim();
+  const head = buildSeoHead(origin, {
+    title,
+    description,
+    path: "/about",
+    image: image ? absoluteUrl(origin, image, s.site_domain) : undefined,
+    siteName: s.site_title,
+    jsonLd: {
+      "@context": "https://schema.org",
+      "@type": "AboutPage",
+      name: title,
+      description,
+      url: origin + "/about",
+    },
+  });
+  const html = await getIndexHtml(c);
+  return serveSsr(c, html, { title, description, head, body: renderAboutSsr(s) });
 });
 
 app.get("/photos", async c => {
   const s = await getSettings(c.env.DB);
-  const origin = new URL(c.req.url).origin;
+  const origin = canonicalOrigin(s.site_domain, c.req.url, c.req.header("x-forwarded-proto"));
   const countRow = await c.env.DB
     .prepare(`SELECT COUNT(*) AS n FROM photos WHERE visible = 1`)
     .first<{ n: number }>();
@@ -527,7 +546,7 @@ app.get("/photos", async c => {
 
 app.get("/links", async c => {
   const s = await getSettings(c.env.DB);
-  const origin = new URL(c.req.url).origin;
+  const origin = canonicalOrigin(s.site_domain, c.req.url, c.req.header("x-forwarded-proto"));
   const countRow = await c.env.DB.prepare(`SELECT COUNT(*) AS n FROM friends WHERE status = 'approved'`).first<{ n: number }>();
   const count = Number(countRow?.n ?? 0);
   const title = `友链 · ${s.site_title}`;
@@ -545,7 +564,7 @@ app.get("/links", async c => {
 
 app.get("/links/apply", async c => {
   const s = await getSettings(c.env.DB);
-  const origin = new URL(c.req.url).origin;
+  const origin = canonicalOrigin(s.site_domain, c.req.url, c.req.header("x-forwarded-proto"));
   const title = `申请友链 · ${s.site_title}`;
   const description = `向 ${s.site_title} 申请交换友情链接`;
   const head = buildSeoHead(origin, {
@@ -563,7 +582,7 @@ app.get("/links/apply", async c => {
  *  首次部署且未设密码时，追加 x-admin-setup=1 标记，前端渲染"设置初始密码"表单。 */
 async function serveAdminEntry(c: Context<HonoEnv>, path: string): Promise<Response> {
   const s = await getSettings(c.env.DB);
-  const origin = new URL(c.req.url).origin;
+  const origin = canonicalOrigin(s.site_domain, c.req.url, c.req.header("x-forwarded-proto"));
   const needsSetup = !(await hasAdminPassword(c.env.DB, c.env.ADMIN_PASSWORD));
   const head =
     buildSeoHead(origin, {
@@ -584,7 +603,7 @@ app.get("/admin", async c => {
   // 已启用秘密入口：已登录管理员跳转到真实入口，其余人得到 404（后台对扫描器隐形）
   if (s.admin_path !== "/admin") {
     if (await isAdmin(c)) return c.redirect(s.admin_path, 302);
-    const origin = new URL(c.req.url).origin;
+    const origin = canonicalOrigin(s.site_domain, c.req.url, c.req.header("x-forwarded-proto"));
     const head =
       buildSeoHead(origin, {
         title: `页面不存在 · ${s.site_title}`,
@@ -601,7 +620,7 @@ app.get("/admin", async c => {
 
 app.get("/post/:slug", async c => {
   const s = await getSettings(c.env.DB);
-  const origin = new URL(c.req.url).origin;
+  const origin = canonicalOrigin(s.site_domain, c.req.url, c.req.header("x-forwarded-proto"));
   const slug = c.req.param("slug");
   const post = await c.env.DB.prepare(`SELECT * FROM posts WHERE slug = ?`).bind(slug).first<PostRow>();
 
@@ -645,8 +664,8 @@ app.get("/post/:slug", async c => {
 app.notFound(async c => {
   const path = new URL(c.req.url).pathname;
   if (path.startsWith("/api/") || path.startsWith("/media/")) return fail(c, "接口不存在", 404);
-  // 秘密后台入口（任意路径由 wrangler run_worker_first 的 /* 兜底到 Worker，
-  // 但没有注册对应路由，因此落到这里）。
+  // 秘密后台入口（任意路径的硬加载都进入本应用，
+  // 未注册对应路由，因此落到这里）。
   // 前置过滤：仅对「单段、无扩展名」的路径查库，避免每个静态资源请求都打 D1。
   if (
     c.req.method === "GET" &&
@@ -656,12 +675,12 @@ app.notFound(async c => {
     const s = await getSettings(c.env.DB);
     if (s.admin_path === path) return serveAdminEntry(c, path);
   }
-  // 非 API：交给 assets（SPA 兜底由 wrangler not_found_handling 处理）
+  // 非 API：交给 ASSETS（SPA 深链兜底返回 index.html）
   return c.env.ASSETS.fetch(c.req.raw);
 });
 
 app.onError((err, c) => {
-  console.error(`[moments] ${c.req.method} ${new URL(c.req.url).pathname}`, err);
+  console.error(`[markdown-i] ${c.req.method} ${new URL(c.req.url).pathname}`, err);
   // 错误日志入库（异步，不影响错误响应返回）
   try {
     const url = new URL(c.req.url);
@@ -714,7 +733,7 @@ async function handleScheduled(env: HonoEnv["Bindings"]): Promise<void> {
       console.error("[bg-preheat] error:", e);
     }
 
-    // 头像补偿：每 10 分钟重试近期头像拉取失败的评论（海外边缘拉国内头像 API 偶发超时）
+    // 头像补偿：每 10 分钟重试近期头像拉取失败的评论（境外网络拉国内头像 API 偶发超时）
     try {
       const avLastRow = await env.DB.prepare(
         `SELECT value FROM kv_store WHERE key = 'avatar_backfill_last'`
@@ -812,10 +831,3 @@ async function handleScheduled(env: HonoEnv["Bindings"]): Promise<void> {
 }
 
 export { app, handleScheduled };
-
-export default {
-  fetch: app.fetch,
-  scheduled: async (_event: ScheduledEvent, env: HonoEnv["Bindings"], _ctx: ExecutionContext) => {
-    await handleScheduled(env);
-  },
-};

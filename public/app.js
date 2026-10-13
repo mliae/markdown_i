@@ -264,6 +264,8 @@
     folder: { stroke: '<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>' },
     bot: { stroke: '<path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/>' },
     shield: { stroke: '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/>' },
+    "shield-alert": { stroke: '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="M12 8v4"/><path d="M12 16h.01"/>' },
+    "user-x": { stroke: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="22" x2="16" y1="11" y2="11"/><line x1="16" x2="22" y1="7" y2="7"/>' },
     "pen-nib": { stroke: '<path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/>' },
     search: { stroke: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>' },
     smile: { stroke: '<circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" x2="9.01" y1="9" y2="9"/><line x1="15" x2="15.01" y1="9" y2="9"/>' },
@@ -5194,17 +5196,6 @@
       }
 
       if (!pos) {
-        // 浏览器定位失败 → IP 定位兜底（Cloudflare 边缘自带数据，城市级，不依赖代理和外部服务）
-        try {
-          const j = await api("/api/geo/ip");
-          if (Number.isFinite(j.latitude) && Number.isFinite(j.longitude)) {
-            pos = { coords: { latitude: j.latitude, longitude: j.longitude } };
-            toast("浏览器定位不可用，已改用 IP 定位（城市级精度）");
-          }
-        } catch (_) {}
-      }
-
-      if (!pos) {
         locBtn.disabled = false;
         locBtn.innerHTML = oldHtml;
         const code = lastErr?.code;
@@ -5509,7 +5500,7 @@
         <aside class="admin-side">
           <div class="admin-brand">
             <span class="admin-logo">${svgIcon("pen-nib", 20)}</span>
-            <div class="admin-brand-name"><b>${esc(state.settings.site_title || "moments")}</b><small>管理后台</small></div>
+            <div class="admin-brand-name"><b>${esc(state.settings.site_title || "Markdown-i")}</b><small>管理后台</small></div>
           </div>
           <nav class="admin-nav">
             ${ADMIN_NAV.map(n => {
@@ -5658,7 +5649,92 @@
         </svg>
         <div class="ov-chart-axis">${trend.map(t => `<span>${t.date.slice(5)}</span>`).join("")}</div>
       </div>
+      ${renderSecurityOverview(d.security)}
       <p class="ov-tip">提示：点击上方数字卡片可快速跳转到对应管理页。</p>`;
+  }
+
+  /* ---------- 安全概览子模块 ---------- */
+  function renderSecurityOverview(s) {
+    if (!s) return "";
+    const secCards = [
+      { label: "24h 威胁", icon: "shield-alert", val: s.threats24h, hint: `${s.totalHits} 累计 · ${s.ruleCount} 条规则`, cls: "ic-red" },
+      { label: "24h 封禁", icon: "user-x", val: s.banned24h, hint: "过去 24 小时新增", cls: "ic-orange" },
+      { label: "活跃封禁", icon: "lock", val: s.activeBans, hint: "当前生效中", cls: "ic-blue" },
+      { label: "自动封禁", icon: "zap", val: s.autoBanEnabled ? "已启用" : "已关闭", hint: s.autoBanEnabled ? `阈值 ${s.banThreshold} 次 → ${s.banDurationHours}h` : "可在安全设置中开启", cls: s.autoBanEnabled ? "ic-green" : "ic-gray" },
+    ];
+    // 攻击类型 Top5
+    const rules = s.rulesTop || [];
+    const maxRule = Math.max(1, ...rules.map(r => r.n));
+    const rulesHtml = rules.length ? rules.map((r, i) => {
+      const pct = (r.n / maxRule * 100).toFixed(1);
+      const rankCls = i === 0 ? "rank-1" : i === 1 ? "rank-2" : i === 2 ? "rank-3" : "rank-n";
+      return `<div class="sec-item">
+        <span class="sec-rule-rank ${rankCls}">${i + 1}</span>
+        <span class="sec-item-name" title="${esc(r.rule)}">${esc(r.label)}</span>
+        <div class="sec-item-track"><div class="sec-item-fill" style="width:${pct}%"></div></div>
+        <span class="sec-item-n">${r.n}</span>
+      </div>`;
+    }).join("") : `<div class="sec-empty-box"><span class="sec-empty-ico">🛡️</span><span>近 24 小时无攻击命中</span></div>`;
+    // 活跃封禁 IP
+    const bans = s.blockedTop || [];
+    const bansHtml = bans.length ? bans.map(b => {
+      const exp = new Date(b.expiresAt); const now = new Date();
+      const remain = Math.max(0, exp - now);
+      const hours = Math.round(remain / 3600000 * 10) / 10;
+      return `<div class="sec-item">
+        <code class="sec-ip">${esc(b.ip)}</code>
+        <span class="sec-item-reason" title="${esc(b.reason)}">${esc(b.reason)}</span>
+        <span class="sec-item-exp">${hours >= 1 ? `${hours}h` : `${Math.round(remain / 60000)}m`} 后</span>
+      </div>`;
+    }).join("") : `<div class="sec-empty-box"><span class="sec-empty-ico">✓</span><span>当前无活跃封禁</span></div>`;
+    // 最近攻击
+    const recent = s.recentAttacks || [];
+    const recentHtml = recent.length ? `<div class="sec-recent">${recent.map(r => {
+      const t = new Date(r.at);
+      const lvlCls = r.level === "high" ? "lvl-high" : r.level === "medium" ? "lvl-med" : "lvl-low";
+      return `<div class="sec-item sec-recent-item">
+        <span class="sec-lvl ${lvlCls}">${esc(r.label)}</span>
+        <code>${esc(r.ip)}</code>
+        <span class="sec-item-path" title="${esc(r.path)}">${esc(r.path)}</span>
+        <span class="sec-item-time" title="${esc(r.at)}">${t.toLocaleString("zh-CN", { hour12: false, month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
+      </div>`;
+    }).join("")}</div>` : `<div class="sec-empty-box"><span class="sec-empty-ico">·</span><span>暂无攻击记录</span></div>`;
+    // 配置状态：纯文字展示，不可点击
+    const configLights = `
+      <div class="sec-config-lights">
+        <span class="sec-light ${s.autoBanEnabled ? "on" : "off"}"><span class="sec-light-dot"></span>自动封禁</span>
+        <span class="sec-light ${s.webhookConfigured ? "on" : "off"}"><span class="sec-light-dot"></span>告警 Webhook</span>
+      </div>`;
+    return `
+      <div class="ov-chart-card sec-card">
+        <div class="ov-chart-head">
+          <h3>安全态势</h3>
+          ${configLights}
+        </div>
+        <div class="ov-cards sec-cards">
+          ${secCards.map(c => `
+            <div class="ov-card sec-metric">
+              <div class="ov-card-ico ${c.cls}">${svgIcon(c.icon, 26)}</div>
+              <div class="ov-card-num">${esc(c.val)}</div>
+              <div class="ov-card-label">${c.label}</div>
+              ${c.hint ? `<div class="sec-metric-hint">${esc(c.hint)}</div>` : ""}
+            </div>`).join("")}
+        </div>
+        <div class="sec-grid">
+          <div class="sec-col">
+            <h4>攻击类型 Top 5 · 近 24h</h4>
+            <div class="sec-item-list">${rulesHtml}</div>
+          </div>
+          <div class="sec-col">
+            <h4>活跃封禁 IP</h4>
+            <div class="sec-item-list">${bansHtml}</div>
+          </div>
+        </div>
+        <div class="sec-recent-wrap">
+          <h4>最近攻击</h4>
+          ${recentHtml}
+        </div>
+      </div>`;
   }
 
   /* ---------- 后台 Tab：访问统计 ---------- */
@@ -7162,11 +7238,11 @@
               <span class="toggle"><input type="checkbox" name="i18n_content_translate" ${s.i18n_content_translate !== false ? "checked" : ""} /><span></span></span>
               <span>
                 动态内容翻译
-                <br /><small style="color:var(--anzhiyu-secondtext)">说说、文章、关于页：繁体走本地转换，英语优先走百度翻译（国内直连、快速稳定），失败自动回退 Workers AI；译文永久缓存，原文修改后自动重译</small>
+                <br /><small style="color:var(--anzhiyu-secondtext)">说说、文章、关于页：繁体走本地转换，英语优先走百度翻译（国内直连、快速稳定），失败自动回退 AI 接口；译文永久缓存，原文修改后自动重译</small>
               </span>
             </label>
             <div class="field">
-              <label>百度翻译凭证（可选）<br /><small style="color:var(--anzhiyu-secondtext)">在 <a href="https://fanyi-api.baidu.com/" target="_blank" rel="noopener">百度翻译开放平台</a> 开通「通用翻译API」后获取；标准版免费不限字符量（QPS=1），留空则仅使用 Workers AI 翻译</small></label>
+              <label>百度翻译凭证（可选）<br /><small style="color:var(--anzhiyu-secondtext)">在 <a href="https://fanyi-api.baidu.com/" target="_blank" rel="noopener">百度翻译开放平台</a> 开通「通用翻译API」后获取；标准版免费不限字符量（QPS=1），留空则仅使用 AI 接口翻译</small></label>
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
                 <input name="baidu_translate_appid" maxlength="32" value="${esc(s.baidu_translate_appid || "")}" placeholder="APP ID" autocomplete="off" />
                 <input name="baidu_translate_key" maxlength="64" value="${esc(s.baidu_translate_key || "")}" placeholder="密钥" autocomplete="new-password" />
@@ -8022,7 +8098,7 @@
       <form class="settings-form" data-music-api-form style="max-width:680px">
         <div class="field">
           <label>服务地址（music-api Worker）</label>
-          <input name="music_api_url" maxlength="200" value="${esc(s.music_api_url || "")}" placeholder="https://music-api.xxx.workers.dev" />
+          <input name="music_api_url" maxlength="200" value="${esc(s.music_api_url || "")}" placeholder="https://music-api.example.com" />
         </div>
         <div class="field">
           <label>ApiKey（在中央服务后台「授权」页生成）</label>
@@ -8307,7 +8383,7 @@
       <div class="admin-panel-head"><h3>评论 @AI 机器人</h3></div>
       <form class="settings-form" data-ai-settings-form style="max-width:680px">
         <div class="field field-row">
-          <label for="ai_reply_enabled">启用评论 @AI 机器人<br /><small style="color:var(--anzhiyu-secondtext)">访客在说说/文章评论中 @机器人昵称 时，由 Cloudflare Workers AI 自动生成回复（消耗每日免费额度），回复以楼中楼形式出现</small></label>
+          <label for="ai_reply_enabled">启用评论 @AI 机器人<br /><small style="color:var(--anzhiyu-secondtext)">访客在说说/文章评论中 @机器人昵称 时，由 AI 自动生成回复，回复以楼中楼形式出现</small></label>
           <label class="toggle">
             <input type="checkbox" name="ai_reply_enabled" id="ai_reply_enabled" ${s.ai_reply_enabled ? "checked" : ""} />
             <span></span>
@@ -8322,8 +8398,8 @@
           <input name="ai_bot_avatar" maxlength="200" value="${esc(s.ai_bot_avatar)}" placeholder="https://...（留空=默认图标）" />
         </div>
         <div class="field">
-          <label>文本模型 ID（高级，可选）<br /><small style="color:var(--anzhiyu-secondtext)">默认使用 Cloudflare 托管免费模型 Qwen3（失败自动回退 Llama 3.2）；如确认其他 @cf/* 模型可用可在此覆盖</small></label>
-          <input name="ai_text_model" maxlength="100" value="${esc(s.ai_text_model)}" placeholder="@cf/qwen/qwen3-30b-a3b-fp8（留空=默认）" />
+          <label>文本模型 ID（高级，可选）<br /><small style="color:var(--anzhiyu-secondtext)">留空时使用服务端 AI_MODEL 配置的默认模型；填入自定义模型 ID 可按次覆盖</small></label>
+          <input name="ai_text_model" maxlength="100" value="${esc(s.ai_text_model)}" placeholder="deepseek-chat（留空=默认）" />
         </div>
         <button class="btn primary" type="submit">保存 AI 设置</button>
       </form>`;
@@ -8593,35 +8669,63 @@
         </div>
       </form>
 
-      <div class="admin-panel-head"><h3>攻击日志（最近 100 条）</h3></div>
-      <div class="sec-toolbar">
-        <select data-attack-level>
-          <option value="">全部等级</option>
-          <option value="high">高危</option>
-          <option value="medium">中危</option>
-          <option value="low">低危</option>
-        </select>
-        <input data-attack-ip placeholder="按 IP 筛选" style="max-width:180px;font-family:monospace" />
-        <button class="btn" data-attack-filter>筛选</button>
-        <button class="btn" data-attack-refresh>刷新</button>
+      <div class="sec-collapse" data-sec-collapse>
+        <div class="sec-collapse-head" data-sec-collapse-toggle role="button" tabindex="0" aria-expanded="false">
+          <h3>攻击日志（最近 100 条）</h3>
+          <svg class="sec-collapse-arrow" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+        </div>
+        <div class="sec-collapse-body">
+          <div class="sec-toolbar">
+            <select data-attack-level>
+              <option value="">全部等级</option>
+              <option value="high">高危</option>
+              <option value="medium">中危</option>
+              <option value="low">低危</option>
+            </select>
+            <input data-attack-ip placeholder="按 IP 筛选" style="max-width:180px;font-family:monospace" />
+            <button class="btn" data-attack-filter>筛选</button>
+            <button class="btn" data-attack-refresh>刷新</button>
+          </div>
+          <div data-attack-list class="sec-block">加载中...</div>
+        </div>
       </div>
-      <div data-attack-list class="sec-block">加载中...</div>
 
-      <div class="admin-panel-head"><h3>封禁 IP 管理</h3></div>
-      <form data-ban-form class="sec-ban-form">
-        <input name="ip" placeholder="IP 地址" required style="font-family:monospace" />
-        <input name="reason" placeholder="原因（可选）" />
-        <input name="hours" type="number" min="1" max="720" value="24" style="width:80px" title="封禁时长（小时）" />
-        <button class="btn primary" type="submit">封禁</button>
-        <span data-ban-msg style="font-size:.85rem;color:var(--anzhiyu-secondtext)"></span>
-      </form>
-      <div data-blocked-list class="sec-block">加载中...</div>
+      <div class="sec-collapse" data-sec-collapse>
+        <div class="sec-collapse-head" data-sec-collapse-toggle role="button" tabindex="0" aria-expanded="false">
+          <h3>封禁 IP 管理</h3>
+          <svg class="sec-collapse-arrow" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+        </div>
+        <div class="sec-collapse-body">
+          <form data-ban-form class="sec-ban-form">
+            <input name="ip" placeholder="IP 地址" required style="font-family:monospace" />
+            <input name="reason" placeholder="原因（可选）" />
+            <input name="hours" type="number" min="1" max="720" value="24" style="width:80px" title="封禁时长（小时）" />
+            <button class="btn primary" type="submit">封禁</button>
+            <span data-ban-msg style="font-size:.85rem;color:var(--anzhiyu-secondtext)"></span>
+          </form>
+          <div data-blocked-list class="sec-block">加载中...</div>
+        </div>
+      </div>
 
-      <div class="admin-panel-head"><h3>规则命中统计（最近 24 小时）</h3></div>
-      <div data-rules-list class="sec-block">加载中...</div>
+      <div class="sec-collapse" data-sec-collapse>
+        <div class="sec-collapse-head" data-sec-collapse-toggle role="button" tabindex="0" aria-expanded="false">
+          <h3>规则命中统计（最近 24 小时）</h3>
+          <svg class="sec-collapse-arrow" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+        </div>
+        <div class="sec-collapse-body">
+          <div data-rules-list class="sec-block">加载中...</div>
+        </div>
+      </div>
 
-      <div class="admin-panel-head"><h3>错误日志（最近 50 条）</h3></div>
-      <div data-errors-list class="sec-block">加载中...</div>
+      <div class="sec-collapse" data-sec-collapse>
+        <div class="sec-collapse-head" data-sec-collapse-toggle role="button" tabindex="0" aria-expanded="false">
+          <h3>错误日志（最近 50 条）</h3>
+          <svg class="sec-collapse-arrow" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+        </div>
+        <div class="sec-collapse-body">
+          <div data-errors-list class="sec-block">加载中...</div>
+        </div>
+      </div>
 
       <div class="admin-panel-head" style="margin-top:1.75rem"><h3>后台入口路径</h3></div>
       <form class="settings-form" data-adminpath-form style="max-width:560px">
@@ -8658,6 +8762,23 @@
         <button class="btn primary" type="submit">修改密码</button>
         <div class="field-hint" style="margin-top:.5rem">修改后立即生效，无需重新部署；其他已登录设备需要用新密码重新解锁。</div>
       </form>`;
+
+    /* ---------- 日志区块折叠（默认折叠，标题行点击展开/收起） ---------- */
+    panel.addEventListener("click", e => {
+      const toggle = e.target.closest("[data-sec-collapse-toggle]");
+      if (!toggle || !panel.contains(toggle)) return;
+      const wrap = toggle.closest("[data-sec-collapse]");
+      if (!wrap) return;
+      const open = wrap.classList.toggle("is-open");
+      toggle.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+    panel.addEventListener("keydown", e => {
+      const toggle = e.target.closest?.("[data-sec-collapse-toggle]");
+      if (toggle && (e.key === "Enter" || e.key === " ")) {
+        e.preventDefault();
+        toggle.click();
+      }
+    });
 
     /* ---------- 数据加载 ---------- */
     const loadAttacks = async () => {
@@ -11795,7 +11916,7 @@
       } catch (_) {}
       state.admin = false;
       renderAdminArea();
-      if (location.pathname === state.adminPath || location.pathname === "/admin") {
+      if (location.pathname === state.adminPath) {
         navigate("/", { replace: true });
       } else {
         route();
@@ -12414,6 +12535,7 @@
     const parentId = Number(form.dataset.parentId) || 0;
     const btn = form.querySelector('button[type="submit"]');
     btn.disabled = true;
+    toast(t("comment.submitting")); // 立即反馈，防止用户以为没点上而重复提交
     try {
       const endpoint = ctype === "post"
         ? `/api/posts/${encodeURIComponent(target.slug)}/comments`
@@ -12467,6 +12589,8 @@
       if (state.settings?.ai_reply_enabled && content.includes(`@${botName}`)) {
         toast(t("comment.ai_called", { name: botName }));
         pollAiReplies(target);
+      } else {
+        toast(t("comment.submit_success"));
       }
     } catch (err) {
       toast(err.message);
@@ -12667,8 +12791,16 @@
     // 首次部署且未设密码：渲染"设置初始密码"表单
     const setupMetaEl = document.querySelector('meta[name="x-admin-setup"]');
     const ssrSetup = setupMetaEl ? setupMetaEl.getAttribute("content") : null;
+    // 后台路由判定：SSR 信号优先（服务端知道真实 admin_path），
+    // 仅在 SPA 内导航（ssrEntry=null）时才信本地 state.adminPath。
+    // 即使 localStorage 里存了旧的 /admin，只要 SSR 说不是，就不能进后台。
+    const effectiveAdminPath = ssrEntry === "1"
+      ? path                                          // 硬加载时 SSR 已确认此路径是后台入口
+      : ssrEntry === "0"
+      ? null                                          // 硬加载时 SSR 判定此路径是 404
+      : state.adminPath;                              // SPA 内导航，信本地记录
     // 后台路由（含秘密入口与 SSR 判定为后台的路径）：隐藏全站背景、恢复纯色，后台不玻璃化
-    const isAdminRoute = path === state.adminPath || path === "/admin" || ssrEntry === "1";
+    const isAdminRoute = !!effectiveAdminPath && path === effectiveAdminPath;
     document.body.classList.toggle("site-bg-admin", isAdminRoute);
     document.querySelectorAll("[data-route]").forEach(a => {
       const key = a.dataset.route;
@@ -12679,7 +12811,7 @@
         (key === "links" && (path === "/links" || path.startsWith("/links/"))) ||
         (key === "friends" && path === "/friends") ||
         (key === "about" && path === "/about") ||
-        (key === "admin" && (path === state.adminPath || path === "/admin"));
+        (key === "admin" && isAdminRoute);
       a.classList.toggle("active", isActive);
     });
     // 切换视图会整体覆盖 #app，先销毁时间线/文章里的 HLS 实例，
@@ -12708,33 +12840,20 @@
       const slug = decodeURIComponent(path.slice("/post/".length));
       const preview = state.admin && new URLSearchParams(search).get("preview") === "1";
       renderPostDetail(slug, preview);
-    } else if (path === state.adminPath || ssrEntry === "1") {
-      // 秘密后台入口（SPA 跳转靠本地记录的路径，硬加载靠 SSR meta 标记；
-      // ssrEntry=1 仅由后端在 path===admin_path 时注入，故任意路径均适用）
-      // 首次部署且未设密码：渲染设置初始密码表单，而非解锁页
+    } else if (isAdminRoute) {
+      // 秘密后台入口：SSR 硬加载时由 ssrEntry="1" 确认，SPA 导航时信本地 adminPath
       if (ssrSetup === "1" && !state.admin) {
         renderAdminSetup();
       } else {
         renderAdmin();
       }
-    } else if (path === "/admin") {
-      // 旧后台地址：以 SSR 信号为准，防止清缓存访客被前端画出解锁表单
-      if (ssrEntry === "1") {
-        if (ssrSetup === "1" && !state.admin) {
-          renderAdminSetup();
-        } else {
-          renderAdmin();
-        }
-      } else if (ssrEntry === "0") {
-        renderNotFound();
-      } else if (state.admin && state.adminPath !== "/admin") {
-        navigate(state.adminPath, { replace: true });
-        return;
-      } else if (state.adminPath === "/admin") {
-        renderAdmin();
-      } else {
-        renderNotFound();
-      }
+    } else if (ssrEntry === "0") {
+      // SSR 明确判定为 404（如 /admin 在 admin_path=jxe2026 时）
+      renderNotFound();
+    } else if (path === "/admin" && state.adminPath !== "/admin") {
+      // SPA 内导航到 /admin 但真实路径已改 → 重定向
+      navigate(state.adminPath, { replace: true });
+      return;
     } else {
       navigate("/", { replace: true });
       return;
@@ -13078,7 +13197,7 @@
 
   /* ================= 启动 ================= */
   // 旧 workers.dev 域名迁移：把缓存/接口设置中的旧绝对地址改成相对路径，
-  // 资源随当前域名（e.jxe.me）走，避免老用户 localStorage 缓存继续引用旧域名
+  // 资源随当前域名走，避免老用户 localStorage 缓存继续引用旧域名
   const OLD_ORIGIN_RE = /^https?:\/\/moments\.237333536\.workers\.dev/;
   function migrateSettings(s) {
     if (!s || typeof s !== "object") return s;

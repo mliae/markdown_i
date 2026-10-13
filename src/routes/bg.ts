@@ -77,7 +77,7 @@ app.get("/", async c => {
   let res: Response;
   try {
     res = await fetch(source.replace("{seed}", seed), {
-      headers: { "User-Agent": "moments-bg/1.0" },
+      headers: { "User-Agent": "markdown-i-bg/1.0" },
       signal: AbortSignal.timeout(15000),
     });
   } catch {
@@ -132,7 +132,7 @@ app.get("/resolve", async c => {
   if (s.banner_bg_mode === "random" || !/^https?:\/\//i.test(u)) return ok(c, { url: "" });
   try {
     const res = await fetch(u, {
-      headers: { "User-Agent": "moments-bg/1.0" },
+      headers: { "User-Agent": "markdown-i-bg/1.0" },
       signal: AbortSignal.timeout(8000),
       redirect: "follow",
     });
@@ -167,7 +167,7 @@ export async function preheatBg(env: HonoEnv["Bindings"]): Promise<void> {
     try {
       if (await env.R2.head(key)) continue; // 已在缓存
       const res = await fetch(source.replace("{seed}", String(seed)), {
-        headers: { "User-Agent": "moments-bg/1.0" },
+        headers: { "User-Agent": "markdown-i-bg/1.0" },
         signal: AbortSignal.timeout(15000),
       });
       if (!res.ok) continue;

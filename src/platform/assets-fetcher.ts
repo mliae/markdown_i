@@ -1,7 +1,6 @@
 /**
  * ASSETS 绑定适配器：本地 public/ 静态文件服务
- * 对应 Workers 的 assets 绑定（run_worker_first + SPA not_found 兜底）：
- * 文件存在则返回文件，其余路径回退 index.html。
+ * 文件存在则返回文件，其余路径回退 index.html（SPA 兜底）。
  */
 import { createReadStream, existsSync, statSync } from "node:fs";
 import { extname, join, resolve } from "node:path";

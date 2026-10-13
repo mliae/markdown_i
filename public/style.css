@@ -62,6 +62,10 @@ a { color: var(--anzhiyu-main); text-decoration: none; }
 button { font-family: inherit; }
 img { max-width: 100%; }
 
+/* SSR 直出列表：仅给蜘蛛读取，JS 正常时隐藏，避免与前端瀑布流版式切换造成闪烁
+   注意：同名规则已在 index.html <head> 内联，此处仅为备份/版本号追踪 */
+[data-ssr-list] { display: none; }
+
 /* ==================== 顶栏 ==================== */
 .topbar {
   position: sticky; top: 0; z-index: 90;
@@ -1392,6 +1396,105 @@ body.music-visible { --fab-bottom: calc(var(--fab-base) + var(--music-h) + var(-
 .ov-chart-axis { display: flex; justify-content: space-between; padding: 0 26px; font-size: .72rem; color: var(--anzhiyu-secondtext); }
 .ov-tip { color: var(--anzhiyu-secondtext); font-size: .8rem; margin: 1rem 0 0; text-align: center; }
 
+/* ---------- 安全仪表盘 ---------- */
+.sec-card { margin-top: 1.25rem; }
+.sec-card h3 { display: flex; align-items: center; gap: 1rem; }
+.sec-card h4 {
+  font-size: .82rem; margin: 0 0 .9rem; color: var(--anzhiyu-secondtext);
+  font-weight: 600; letter-spacing: .05em;
+  display: flex; align-items: center; gap: .5rem;
+}
+.sec-card h4::before { content: ""; width: 3px; height: 12px; background: var(--anzhiyu-main); border-radius: 2px; }
+
+/* 配置状态：纯文字 + 状态点，不可点击 */
+.sec-config-lights { display: flex; gap: .9rem; font-size: .76rem; flex-wrap: wrap; margin-left: auto; color: var(--anzhiyu-secondtext); }
+.sec-light {
+  display: inline-flex; align-items: center; gap: .35rem;
+  font-weight: 400; user-select: none;
+}
+.sec-light-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.sec-light.on { color: #16a34a; }
+.sec-light.on .sec-light-dot { box-shadow: 0 0 6px #22c55ecc; animation: sec-pulse 2s infinite; }
+.sec-light.off { color: #dc2626; }
+@keyframes sec-pulse { 0%,100% { opacity: 1; } 50% { opacity: .5; } }
+
+/* 4 张安全指标卡：icon 语言与上方概览卡保持一致（线性图标 + 等级配色，无渐变方块） */
+.sec-cards { grid-template-columns: repeat(4, 1fr); margin-bottom: 1.4rem; }
+.sec-cards .ov-card { cursor: default; }
+.sec-cards .ov-card:hover { transform: none; border-color: var(--anzhiyu-card-border); }
+.sec-cards .ov-card-ico.ic-red    { color: #dc2626; }
+.sec-cards .ov-card-ico.ic-orange { color: #ea580c; }
+.sec-cards .ov-card-ico.ic-blue   { color: #2563eb; }
+.sec-cards .ov-card-ico.ic-green  { color: #16a34a; }
+.sec-cards .ov-card-ico.ic-gray   { color: var(--anzhiyu-secondtext); }
+.sec-metric-hint { font-size: .7rem; color: var(--anzhiyu-secondtext); margin-top: .3rem; line-height: 1.4; }
+
+/* 统一卡片风格：攻击类型、封禁 IP、最近攻击 */
+.sec-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 1.6rem;
+  margin-top: 1.2rem; padding-top: 1.2rem;
+  border-top: 1px dashed var(--anzhiyu-card-border);
+}
+.sec-col { min-width: 0; }
+.sec-item-list { display: flex; flex-direction: column; gap: .5rem; }
+.sec-item {
+  display: flex; align-items: center; gap: .6rem;
+  padding: .5rem .7rem; border-radius: 8px;
+  background: var(--anzhiyu-card-border);
+  font-size: .78rem;
+  transition: background .15s, transform .15s;
+}
+.sec-item:hover { background: color-mix(in srgb, var(--anzhiyu-main) 8%, var(--anzhiyu-card-border)); transform: translateX(2px); }
+
+/* 攻击类型行 */
+.sec-rule-rank {
+  width: 20px; height: 20px; border-radius: 6px; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: .68rem; font-weight: 700;
+  background: var(--anzhiyu-secondtext); color: var(--anzhiyu-card-bg);
+}
+.sec-rule-rank.rank-1 { background: linear-gradient(135deg, #f87171, #dc2626); color: #fff; }
+.sec-rule-rank.rank-2 { background: linear-gradient(135deg, #fb923c, #ea580c); color: #fff; }
+.sec-rule-rank.rank-3 { background: linear-gradient(135deg, #fbbf24, #d97706); color: #fff; }
+.sec-item-name { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 0; min-width: 0; }
+.sec-item-track { flex: 1; height: 5px; background: var(--anzhiyu-card-bg); border-radius: 3px; overflow: hidden; min-width: 40px; }
+.sec-item-fill { height: 100%; background: linear-gradient(90deg, var(--anzhiyu-main), #f87171); border-radius: 3px; transition: width .4s ease; }
+.sec-item-n { font-size: .82rem; font-weight: 700; color: var(--anzhiyu-main); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+
+/* 封禁 IP 行 */
+.sec-ip { font-family: ui-monospace, monospace; font-size: .73rem; font-weight: 600; color: var(--anzhiyu-main); flex-shrink: 0; }
+.sec-item-reason { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .73rem; color: var(--anzhiyu-fontcolor); }
+.sec-item-exp { font-variant-numeric: tabular-nums; color: var(--anzhiyu-secondtext); font-size: .72rem; flex-shrink: 0; }
+
+/* 等级标签 */
+.sec-lvl { display: inline-block; padding: .12rem .5rem; border-radius: 10px; font-size: .68rem; font-weight: 600; flex-shrink: 0; }
+.sec-lvl.lvl-high { background: #ef444422; color: #dc2626; }
+.sec-lvl.lvl-med  { background: #f59e0b22; color: #b45309; }
+.sec-lvl.lvl-low  { background: #3b82f622; color: #2563eb; }
+
+/* 空状态 */
+.sec-empty-box {
+  display: flex; flex-direction: column; align-items: center; gap: .4rem;
+  padding: 1.4rem 1rem; border-radius: 10px;
+  background: var(--anzhiyu-card-border); color: var(--anzhiyu-secondtext);
+  font-size: .8rem;
+}
+.sec-empty-ico { font-size: 1.4rem; opacity: .6; }
+
+/* 最近攻击 */
+.sec-recent-wrap { margin-top: 1.2rem; padding-top: 1.2rem; border-top: 1px dashed var(--anzhiyu-card-border); }
+.sec-recent { display: flex; flex-direction: column; gap: .3rem; }
+.sec-recent-item code { background: var(--anzhiyu-card-bg); padding: .1rem .4rem; border-radius: 4px; font-size: .7rem; font-family: ui-monospace, monospace; flex-shrink: 0; }
+.sec-item-path { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--anzhiyu-secondtext); font-family: ui-monospace, monospace; font-size: .7rem; }
+.sec-item-time { color: var(--anzhiyu-secondtext); white-space: nowrap; font-size: .7rem; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+
+@media (max-width: 700px) {
+  .sec-cards { grid-template-columns: repeat(2, 1fr); }
+  .sec-grid { grid-template-columns: 1fr; gap: 1rem; }
+  .sec-item { flex-wrap: wrap; }
+  .sec-item-track { min-width: 60px; }
+}
+
 @media (max-width: 900px) {
   .admin-app { flex-direction: column; position: relative; }
   /* 遮罩层：打开抽屉时出现，点击关闭（层级高于站点顶栏 z-index:90，避免被盖住） */
@@ -2696,6 +2799,34 @@ a.about-contact-item:hover { background: var(--anzhiyu-main-deep); }
 .sec-toolbar { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin-bottom: .75rem; }
 .sec-toolbar input, .sec-toolbar select { padding: .4rem .55rem; border: 1px solid var(--anzhiyu-card-border); border-radius: 6px; background: var(--anzhiyu-card-bg); color: var(--anzhiyu-fontcolor); font-size: .85rem; }
 .sec-block { margin-bottom: .5rem; }
+
+/* 安全日志区块折叠（默认折叠） */
+.sec-collapse { margin-top: 1.5rem; }
+.sec-collapse:first-child { margin-top: 0; }
+.sec-collapse-head {
+  display: flex; align-items: center; justify-content: space-between; gap: .75rem;
+  padding: .68rem 1rem;
+  border: var(--style-border-always); border-radius: 10px;
+  background: var(--anzhiyu-card-bg);
+  cursor: pointer; user-select: none;
+  transition: border-color .2s, box-shadow .2s;
+}
+.sec-collapse-head:hover { border-color: var(--anzhiyu-main); box-shadow: var(--anzhiyu-shadow-border); }
+.sec-collapse-head:focus-visible { outline: 2px solid var(--anzhiyu-main); outline-offset: 1px; }
+.sec-collapse-head h3 { margin: 0; font-size: 1.02rem; }
+.sec-collapse-arrow { color: var(--anzhiyu-secondtext); flex-shrink: 0; transition: transform .25s, color .2s; }
+.sec-collapse.is-open .sec-collapse-head { border-radius: 10px 10px 0 0; }
+.sec-collapse.is-open .sec-collapse-head:hover { box-shadow: none; }
+.sec-collapse.is-open .sec-collapse-arrow { transform: rotate(180deg); color: var(--anzhiyu-main); }
+.sec-collapse-body {
+  display: none;
+  padding: .9rem 1rem 1rem;
+  border: var(--style-border-always); border-top: none;
+  border-radius: 0 0 10px 10px;
+  background: var(--anzhiyu-card-bg);
+}
+.sec-collapse.is-open .sec-collapse-body { display: block; }
+.sec-collapse-body > :last-child { margin-bottom: 0; }
 .sec-table-wrap { overflow-x: auto; border: var(--style-border); border-radius: 10px; background: var(--anzhiyu-card-bg); }
 .sec-table { width: 100%; border-collapse: collapse; font-size: .82rem; min-width: 680px; }
 .sec-table th { text-align: left; padding: .55rem .75rem; background: var(--anzhiyu-main-deep); color: var(--anzhiyu-fontcolor); font-weight: 600; white-space: nowrap; border-bottom: 1px solid var(--anzhiyu-card-border); }

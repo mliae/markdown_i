@@ -15,6 +15,7 @@ import {
 } from "../comment-service";
 import { maybeScheduleAiReply } from "../ai-reply";
 import { getSettings } from "../settings";
+import { canonicalOrigin } from "../seo";
 import { ensureAvatar } from "../avatar";
 import { handleCommentMailNotifications } from "../mail";
 
@@ -106,7 +107,7 @@ app.post("/:id/comments", async c => {
     .bind(id)
     .first<{ content: string }>();
   const targetLabel = (moment?.content ?? "").replace(/\s+/g, " ").slice(0, 60) || `说说 #${id}`;
-  const origin = new URL(c.req.url).origin;
+  const origin = canonicalOrigin(s.site_domain, c.req.url, c.req.header("x-forwarded-proto"));
   c.executionCtx.waitUntil(
     handleCommentMailNotifications({
       mail: {
@@ -119,7 +120,7 @@ app.post("/:id/comments", async c => {
       },
       db: c.env.DB,
       notifySettings: s,
-      site: s.site_title || "Moments",
+      site: s.site_title || "Markdown-i",
       comment: result.comment,
       targetTypeLabel: "说说",
       targetLabel,

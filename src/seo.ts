@@ -5,7 +5,7 @@
  * - robots / sitemap / rss
  */
 import type { SiteSettings } from "./settings";
-import type { PostRow } from "./db";
+import type { FeedItem, PostRow } from "./db";
 import { keyToSrc, serializePost } from "./db";
 import { renderMarkdownSafe } from "./markdown";
 
@@ -26,6 +26,29 @@ export function absoluteUrl(origin: string, src: string, siteDomain?: string): s
   if (/^https?:\/\//i.test(src)) return src;
   const base = (siteDomain || origin).replace(/\/$/, "");
   return base + (src.startsWith("/") ? src : "/" + src);
+}
+
+/** 请求 origin 清洗：反代（宝塔 Nginx）下 TLS 在代理终结，Worker 收到的常是
+ *  http://host:443 —— 按端口还原协议并剥掉默认端口，尊重 X-Forwarded-Proto。 */
+export function sanitizeOrigin(reqUrl: string, forwardedProto?: string): string {
+  try {
+    const u = new URL(reqUrl);
+    if (u.port === "443") return `https://${u.hostname}`;
+    if (u.port === "80") return `http://${u.hostname}`;
+    const proto = (forwardedProto || "").split(",")[0].trim().toLowerCase();
+    if (proto === "https" && u.protocol === "http:") return `https://${u.host}`;
+    return u.origin;
+  } catch {
+    return reqUrl;
+  }
+}
+
+/** 规范站点 origin（robots/sitemap/rss/canonical/OG 等绝对 URL 的根）。
+ *  优先后台 site_domain（换域名只改后台，SEO 链接自动跟随）；留空时清洗请求 origin。 */
+export function canonicalOrigin(siteDomain: string, reqUrl: string, forwardedProto?: string): string {
+  const d = (siteDomain || "").trim().replace(/\/+$/, "");
+  if (d) return /^https?:\/\//i.test(d) ? d : `https://${d}`;
+  return sanitizeOrigin(reqUrl, forwardedProto);
 }
 
 export interface SeoHeadOptions {
@@ -52,7 +75,7 @@ export function buildSeoHead(origin: string, o: SeoHeadOptions): string {
   tags.push(`<meta property="og:title" content="${escAttr(o.title)}" />`);
   if (o.description) tags.push(`<meta property="og:description" content="${escAttr(o.description)}" />`);
   tags.push(`<meta property="og:url" content="${escAttr(url)}" />`);
-  tags.push(`<meta property="og:site_name" content="${escAttr(o.siteName || "Moments")}" />`);
+  tags.push(`<meta property="og:site_name" content="${escAttr(o.siteName || "Markdown-i")}" />`);
   if (o.image) tags.push(`<meta property="og:image" content="${escAttr(o.image)}" />`);
   tags.push(`<meta name="twitter:card" content="${o.image ? "summary_large_image" : "summary"}" />`);
   tags.push(`<meta name="twitter:title" content="${escAttr(o.title)}" />`);
@@ -169,6 +192,117 @@ export function renderPostSsr(row: PostRow, commentCount: number, defaultPoster 
         </div>
         </div>
       </div>`;
+}
+
+/* ==================== 列表页 / 首页 / 关于页 直出 ==================== */
+
+/** 文章列表 SSR：与前端 .post-item 结构对齐，蜘蛛无需执行 JS 也能抓到文章入口 */
+export function renderPostsSsr(posts: PostRow[], r2Domain?: string, b2Domain?: string): string {
+  const items = posts
+    .map(row => {
+      const p = serializePost(row, false, r2Domain, b2Domain);
+      const cover = p.cover
+        ? `<img class="cover" src="${escAttr(p.cover)}" alt="${escAttr(p.title)}" loading="lazy" referrerpolicy="no-referrer" />`
+        : "";
+      return `<a class="post-item${p.pinned ? " post-item--pinned" : ""}" href="/post/${encodeURIComponent(p.slug)}">
+        ${cover}
+        <div class="info">
+          <h3>${p.pinned ? PIN_BADGE : ""}${esc(p.title)}</h3>
+          ${p.excerpt ? `<p class="excerpt">${esc(p.excerpt)}</p>` : ""}
+          <div class="date"><time datetime="${escAttr(p.created_at)}">${esc(fmtDate(p.created_at))}</time></div>
+        </div>
+      </a>`;
+    })
+    .join("");
+  return `<div class="essay"><div class="posts-wrap">${items || `<div class="essay-empty">暂无文章</div>`}</div></div>`;
+}
+
+/** 首页混合时间线 SSR：输出最近说说 + 文章的标题/摘要/正文/图片，供蜘蛛直接读取 */
+export function renderFeedSsr(items: FeedItem[], s: SiteSettings): string {
+  const author = esc(s.author_name || s.site_title || "Markdown-i");
+  const html = items
+    .map(item => {
+      const time = `<time datetime="${escAttr(item.created_at)}">${esc(fmtDate(item.created_at))}</time>`;
+      if (item.kind === "post") {
+        const cover = item.cover
+          ? `<div class="bber-post-cover"><img src="${escAttr(item.cover)}" alt="${escAttr(item.title)}" loading="lazy" referrerpolicy="no-referrer" /></div>`
+          : "";
+        return `<li class="bber-item bber-item--post${item.pinned ? " bber-item--pinned" : ""}">
+          <a class="bber-post-link" href="/post/${encodeURIComponent(item.slug)}">
+            <div class="bber-author-row"><span class="bber-author"><span class="bber-author-nickname">文章</span></span>${item.pinned ? PIN_BADGE : ""}</div>
+            ${cover}
+            <div class="bber-post-title">${esc(item.title)}</div>
+            ${item.excerpt ? `<div class="bber-post-excerpt">${esc(item.excerpt)}</div>` : ""}
+            <hr /><div class="bber-bottom"><div class="bber-info"><div class="bber-info-time">${time}</div></div></div>
+          </a>
+        </li>`;
+      }
+      const body = renderMarkdownSafe(item.content || "", s.video_default_poster, s.r2_domain, s.b2_domain);
+      const images = (item.images || [])
+        .slice(0, 9)
+        .map(src => `<img src="${escAttr(src)}" alt="" loading="lazy" referrerpolicy="no-referrer" />`)
+        .join("");
+      const videos = (item.videos || [])
+        .map(v => {
+          if (v.kind === "embed") return "";
+          const src = v.src || "";
+          if (!src) return "";
+          const poster = v.poster ? ` poster="${escAttr(v.poster)}"` : "";
+          return `<video src="${escAttr(src)}"${poster} controls preload="none" playsinline></video>`;
+        })
+        .join("");
+      return `<li class="bber-item bber-item--moment">
+        <div class="bber-content">
+          <div class="bber-author-row"><span class="bber-author"><span class="bber-author-nickname">${author}</span></span><span class="bber-post-tag bber-post-tag--moment">说说</span></div>
+          <div class="datacont"><div class="m-xlate-content">${body}</div>${videos}</div>
+          ${images ? `<div class="bber-images">${images}</div>` : ""}
+        </div>
+        <hr /><div class="bber-bottom"><div class="bber-info"><div class="bber-info-time">${time}</div>${item.location ? `<div class="bber-info-from">${esc(item.location)}</div>` : ""}</div></div>
+      </li>`;
+    })
+    .join("");
+  return `<div class="essay"><div class="essay-list-container"><div class="essay-content-wrapper"><section class="timeline"><ul id="waterfall" class="list ssr-feed-list" data-ssr-list>${html}</ul></section></div></div></div>`;
+}
+
+/** 关于页 SSR：后台关于文案直出，避免 /about 落到 SPA 空壳 */
+export function renderAboutSsr(s: SiteSettings): string {
+  const rows = (raw: string) =>
+    String(raw || "")
+      .split("\n")
+      .map(line => line.trim())
+      .filter(Boolean)
+      .map(line => line.split("|").map(cell => cell.trim()));
+  const name = esc(s.author_name || s.site_title || "Markdown-i");
+  const avatar = (s.about_avatar || s.author_avatar || s.brand_avatar || "").trim();
+  const avatarHtml = avatar
+    ? `<img class="about-avatar-img" src="${escAttr(avatar)}" alt="${name}" referrerpolicy="no-referrer" />`
+    : "";
+  const stats = rows(s.about_stats)
+    .map(r => `<div class="about-stat-mini"><span class="about-stat-mini-num">${esc(r[1] || "")}</span><span class="about-stat-mini-label">${esc(r[0] || "")}</span>${r[2] ? `<span class="about-stat-mini-desc">${esc(r[2])}</span>` : ""}</div>`)
+    .join("");
+  const timeline = rows(s.about_timeline)
+    .map(r => `<div class="about-tl-item"><div class="about-tl-dot"></div><div class="about-tl-body"><div class="about-tl-date">${esc(r[0] || "")}</div><div class="about-tl-title">${esc(r[1] || "")}</div>${r[2] ? `<div class="about-tl-desc">${esc(r[2])}</div>` : ""}</div></div>`)
+    .join("");
+  const big = rows(s.about_bigstats)
+    .map(r => `<div class="about-big-item"><div class="about-big-num">${esc(r[0] || "")}</div><div class="about-big-label">${esc(r[1] || "")}</div></div>`)
+    .join("");
+  const contacts = rows(s.about_contacts)
+    .map(r => {
+      const inner = `<span class="about-contact-type">${esc(r[0] || "")}</span><span class="about-contact-val">${esc(r[1] || "")}</span>`;
+      return r[2] ? `<a class="about-contact-item" href="${escAttr(r[2])}" target="_blank" rel="noopener noreferrer nofollow">${inner}</a>` : `<div class="about-contact-item">${inner}</div>`;
+    })
+    .join("");
+  return `<div class="essay"><div class="about-wrap">
+    <section class="about-card about-head">
+      <div class="about-greet"><h1>${esc(s.about_greeting || "先认识一下，再慢慢读。")}</h1>${s.about_greeting_sub ? `<p class="about-greet-sub">${esc(s.about_greeting_sub)}</p>` : ""}</div>
+      <div class="about-author"><div class="about-avatar">${avatarHtml}</div><div class="about-author-info"><div class="about-author-name">${name}</div>${s.about_signature ? `<div class="about-author-sign">${esc(s.about_signature)}</div>` : ""}</div></div>
+    </section>
+    ${stats ? `<aside class="about-card about-stats-aside"><div class="about-card-title">一些数字</div><div class="about-stats-mini">${stats}</div></aside>` : ""}
+    <section class="about-card about-bio${stats ? " has-aside" : ""}"><div class="about-bio-main"><h2 class="about-card-title">关于我</h2><div class="article-body">${renderMarkdownSafe(s.about_bio || "", s.video_default_poster, s.r2_domain, s.b2_domain)}</div></div></section>
+    ${timeline ? `<section class="about-card about-tl"><h2 class="about-card-title">时间线</h2><div class="about-timeline">${timeline}</div></section>` : ""}
+    ${big ? `<section class="about-card about-big"><div class="about-card-title">累计记录</div><div class="about-big-grid">${big}</div></section>` : ""}
+    ${contacts ? `<section class="about-card about-contact"><h2 class="about-card-title">联系我</h2><div class="about-contact-list">${contacts}</div></section>` : ""}
+  </div></div>`;
 }
 
 /* ==================== robots / sitemap / rss ==================== */

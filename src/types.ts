@@ -6,9 +6,9 @@ export interface Env {
   DB: D1Database;
   R2: R2Bucket;
   ASSETS: Fetcher;
-  /** Cloudflare Workers AI（评论 @AI 回复） */
+  /** AI 绑定（评论 @AI 回复；Node 下为 OpenAI 兼容适配器） */
   AI: AiBinding;
-  /** 站主解锁密码（本地 .dev.vars / 线上 wrangler secret） */
+  /** 站主解锁密码（.env 配置） */
   ADMIN_PASSWORD: string;
   SITE_NAME: string;
 }

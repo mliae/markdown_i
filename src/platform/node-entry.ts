@@ -130,7 +130,7 @@ async function main(): Promise<void> {
   });
   console.log(`[markdown-i] http://127.0.0.1:${PORT}  (data: ${DATA_DIR})`);
 
-  // 每分钟一次（与 wrangler cron "* * * * *" 对齐），内部各自按间隔判断是否执行
+  // 每分钟一次，内部各自按间隔判断是否执行
   cron.schedule("* * * * *", () => {
     handleScheduled(env).catch(e => console.error("[cron]", e));
   });

@@ -18,6 +18,7 @@ import {
 } from "../auth";
 import { keyToSrc } from "../db";
 import { getSettings, updateSettings, normalizeAdminPath } from "../settings";
+import { canonicalOrigin } from "../seo";
 import { createComment, deleteCommentAnywhere, editCommentAnywhere } from "../comment-service";
 import { handleCommentMailNotifications } from "../mail";
 import { ensureAvatar } from "../avatar";
@@ -303,6 +304,9 @@ app.get("/settings", requireAdmin, async c => {
  */
 app.get("/overview", requireAdmin, async c => {
   const db = c.env.DB;
+  const nowIso = new Date().toISOString();
+  const dayAgo = new Date(Date.now() - 24 * 3600_000).toISOString();
+  const s = await getSettings(db);
   const batch = await db.batch([
     db.prepare(`SELECT COUNT(*) AS n FROM moments`),
     db.prepare(`SELECT COUNT(*) AS n FROM posts`),
@@ -313,8 +317,25 @@ app.get("/overview", requireAdmin, async c => {
        WHERE created_at >= strftime('%Y-%m-%dT%H:%M:%fZ','now','-6 days')
        GROUP BY date(created_at) ORDER BY d ASC`
     ),
+    // 安全仪表盘：24h 威胁数、24h 封禁数、当前活跃封禁、累计攻击命中
+    db.prepare(`SELECT COUNT(*) AS n FROM attack_log WHERE created_at > ?`).bind(dayAgo),
+    db.prepare(`SELECT COUNT(*) AS n FROM blocked_ips WHERE blocked_at > ?`).bind(dayAgo),
+    db.prepare(`SELECT COUNT(*) AS n FROM blocked_ips WHERE expires_at > ?`).bind(nowIso),
+    db.prepare(`SELECT COUNT(*) AS n FROM attack_log`),
+    // 攻击类型 Top5（24h）
+    db.prepare(
+      `SELECT rule, COUNT(*) AS n FROM attack_log WHERE created_at > ? GROUP BY rule ORDER BY n DESC LIMIT 5`
+    ).bind(dayAgo),
+    // 当前活跃封禁 Top5（最近被封的）
+    db.prepare(
+      `SELECT ip, reason, blocked_at, expires_at, level FROM blocked_ips WHERE expires_at > ? ORDER BY blocked_at DESC LIMIT 5`
+    ).bind(nowIso),
+    // 最近 3 次攻击
+    db.prepare(
+      `SELECT ip, rule, level, country, path, created_at FROM attack_log ORDER BY id DESC LIMIT 3`
+    ),
   ]);
-  const num = (i: number) => Number((batch[i].results[0] as { n: number }).n);
+  const num = (i: number) => Number((batch[i].results[0] as { n: number })?.n ?? 0);
   // 补齐最近 7 天（含今天），无数据的天补 0
   const trendMap = new Map<string, number>();
   for (const r of (batch[4].results as Array<{ d: string; n: number }>)) trendMap.set(r.d, Number(r.n));
@@ -324,12 +345,37 @@ app.get("/overview", requireAdmin, async c => {
     const key = d.toISOString().slice(0, 10);
     trend.push({ date: key, count: trendMap.get(key) ?? 0 });
   }
+  const labelOfRule: Record<string, string> = Object.fromEntries(ATTACK_RULES.map(r => [r.name, r.label]));
+  const rulesTop = (batch[9].results as Array<{ rule: string; n: number }>).map(r => ({
+    rule: r.rule, label: labelOfRule[r.rule] || r.rule, n: Number(r.n),
+  }));
+  const blockedTop = (batch[10].results as Array<{ ip: string; reason: string; blocked_at: string; expires_at: string; level: string }>).map(r => ({
+    ip: r.ip, reason: r.reason, blockedAt: r.blocked_at, expiresAt: r.expires_at, level: r.level,
+  }));
+  const recentAttacks = (batch[11].results as Array<{ ip: string; rule: string; level: string; country: string; path: string; created_at: string }>).map(r => ({
+    ip: r.ip, label: labelOfRule[r.rule] || r.rule, level: r.level, country: r.country, path: r.path, at: r.created_at,
+  }));
   return ok(c, {
     moments: num(0),
     posts: num(1),
     comments: num(2),
     photos: num(3),
     trend,
+    // 安全概览
+    security: {
+      threats24h: num(5),
+      banned24h: num(6),
+      activeBans: num(7),
+      totalHits: num(8),
+      ruleCount: ATTACK_RULES.length,
+      autoBanEnabled: !!s.auto_ban_enabled,
+      banThreshold: parseInt(s.ban_threshold, 10) || 5,
+      banDurationHours: parseInt(s.ban_duration_hours, 10) || 24,
+      webhookConfigured: !!(s.security_webhook_url && s.security_webhook_url.trim()),
+      rulesTop,
+      blockedTop,
+      recentAttacks,
+    },
   });
 });
 
@@ -511,7 +557,7 @@ app.post("/comments/:cid/reply", requireAdmin, async c => {
     ? keyToSrc(s.author_avatar, s.r2_domain, s.b2_domain)
     : "";
   // 博主网站：取后台设置的站点主域名；留空时回退当前请求 origin
-  const origin = new URL(c.req.url).origin;
+  const origin = canonicalOrigin(s.site_domain, c.req.url, c.req.header("x-forwarded-proto"));
   const ownerWebsite = s.site_domain || origin;
   // 博主身份：昵称取站点作者名，邮箱取管理员收件箱（用于自通知去重）
   const input = {
@@ -557,7 +603,7 @@ app.post("/comments/:cid/reply", requireAdmin, async c => {
             replyNotify: s.mail_reply_notify,
           },
           db: c.env.DB,
-          site: s.site_title || "Moments",
+          site: s.site_title || "Markdown-i",
           comment: result.comment,
           targetTypeLabel: targetType === "post" ? "文章" : "说说",
           targetLabel,

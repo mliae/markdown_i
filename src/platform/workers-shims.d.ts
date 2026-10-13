@@ -106,8 +106,3 @@ interface ScheduledEvent {
   waitUntil(promise: Promise<unknown>): void;
   passThroughOnException(): void;
 }
-
-// Node fetch（undici）会忽略该非标准字段；Cloudflare 上用于边缘缓存
-interface RequestInit {
-  cf?: unknown;
-}

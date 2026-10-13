@@ -13,6 +13,7 @@ import { ok, fail } from "../respond";
 import type { HonoEnv } from "../types";
 import { requireAdmin, isAdmin } from "../auth";
 import { getSettings } from "../settings";
+import { canonicalOrigin } from "../seo";
 import { pingIndexNow, baiduPush } from "../indexnow";
 import { serializePost, mediaKeyFrom, type PostRow } from "../db";
 import {
@@ -175,7 +176,7 @@ app.post("/", requireAdmin, async c => {
   if (!row) return fail(c, "保存失败", 500);
 
   const url = `/post/${encodeURIComponent(slug)}`;
-  const origin = new URL(c.req.url).origin;
+  const origin = canonicalOrigin(s.site_domain, c.req.url, c.req.header("x-forwarded-proto"));
   // 发布即自动推送（best-effort，失败不影响保存）
   if (input.status === "published") {
     if (s.indexnow_auto && s.indexnow_key?.trim()) pingIndexNow(c.env.DB, s, [url], origin).catch(() => {});
@@ -218,7 +219,7 @@ app.put("/:id", requireAdmin, async c => {
   const s = await getSettings(c.env.DB);
   const url = `/post/${encodeURIComponent(slug)}`;
   if (input.status === "published") {
-    const origin = new URL(c.req.url).origin;
+    const origin = canonicalOrigin(s.site_domain, c.req.url, c.req.header("x-forwarded-proto"));
     if (s.indexnow_auto && s.indexnow_key?.trim()) pingIndexNow(c.env.DB, s, [url], origin).catch(() => {});
     if (s.baidu_push_enabled && s.baidu_push_site?.trim() && s.baidu_push_token?.trim()) baiduPush(c.env.DB, s, [url], origin).catch(() => {});
   }
@@ -256,7 +257,7 @@ app.post("/:id/publish", requireAdmin, async c => {
   if (nextStatus === "published") {
     const s = await getSettings(c.env.DB);
     const url = `/post/${encodeURIComponent(row.slug)}`;
-    const origin = new URL(c.req.url).origin;
+    const origin = canonicalOrigin(s.site_domain, c.req.url, c.req.header("x-forwarded-proto"));
     if (s.indexnow_auto && s.indexnow_key?.trim()) pingIndexNow(c.env.DB, s, [url], origin).catch(() => {});
     if (s.baidu_push_enabled && s.baidu_push_site?.trim() && s.baidu_push_token?.trim()) baiduPush(c.env.DB, s, [url], origin).catch(() => {});
   }
@@ -380,7 +381,7 @@ app.post("/:slug/comments", async c => {
   await maybeScheduleAiReply(c, { type: "post", targetId: post.id, comment: result.comment });
 
   // 邮件通知（异步执行，失败静默）：管理员新评论 + 被回复者订阅通知
-  const origin = new URL(c.req.url).origin;
+  const origin = canonicalOrigin(ps.site_domain, c.req.url, c.req.header("x-forwarded-proto"));
   c.executionCtx.waitUntil(
     handleCommentMailNotifications({
       mail: {
@@ -393,7 +394,7 @@ app.post("/:slug/comments", async c => {
       },
       notifySettings: ps,
       db: c.env.DB,
-      site: ps.site_title || "Moments",
+      site: ps.site_title || "Markdown-i",
       comment: result.comment,
       targetTypeLabel: "文章",
       targetLabel: post.title,
