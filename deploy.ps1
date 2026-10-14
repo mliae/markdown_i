@@ -1,4 +1,4 @@
-# deploy.ps1 — 一键部署：GitHub 备份 + 服务器更新
+# deploy.ps1 — 一键部署：GitHub 备份 + 服务器更新（1Panel 容器版）
 # 用法:  .\deploy.ps1            # 默认提交信息 "update"
 #        .\deploy.ps1 -m "修复XX" # 自定义提交信息
 param([string]$m = "update")
@@ -7,7 +7,8 @@ $ErrorActionPreference = "Stop"
 $proj      = "c:\Users\Administrator\Documents\trae_projects\Markdown-i"
 $key       = "$env:USERPROFILE\.ssh\markdown_i_deploy"
 $server    = "root@118.178.126.217"
-$remoteDir = "/www/wwwsites/markdown-i"
+$remoteDir = "/opt/1panel/www/sites/ymao.me/index"
+$rtDir     = "/opt/1panel/runtime/node/nodejs"
 $tmp       = "/tmp/mdi-deploy"
 
 Set-Location $proj
@@ -24,19 +25,19 @@ if (git status --porcelain) {
     Write-Host "  无改动，跳过 commit" -ForegroundColor DarkGray
 }
 
-# ---------- 2. 构建 ----------
-Write-Host "[2/4] 构建 dist..." -ForegroundColor Cyan
-npm run build
-
-# ---------- 3. 上传（src/dist/public/package.json 到临时目录） ----------
-Write-Host "[3/4] 上传服务器..." -ForegroundColor Cyan
+# ---------- 2. 上传源码到服务器（src/public/package.json/scripts/.env） ----------
+Write-Host "[2/4] 上传源码到服务器..." -ForegroundColor Cyan
 ssh -i $key -o StrictHostKeyChecking=no -o ConnectTimeout=20 $server "rm -rf $tmp && mkdir -p $tmp"
-scp -i $key -o StrictHostKeyChecking=no -q -r src dist public package.json "${server}:$tmp/"
+scp -i $key -o StrictHostKeyChecking=no -q -r src public package.json scripts .npmrc "${server}:$tmp/"
 
-# ---------- 4. 服务器端安装（index.html 最后覆盖，防 CDN 缓存污染）+ 重启 ----------
-Write-Host "[4/4] 安装并重启服务..." -ForegroundColor Cyan
-ssh -i $key $server "cd $remoteDir && cp -r $tmp/src/. src/ && cp -r $tmp/dist/. dist/ && cp $tmp/package.json . && cd $tmp/public && find . -type f ! -name index.html -exec cp --parents {} $remoteDir/public/ \; && cp index.html $remoteDir/public/index.html && rm -rf $tmp && systemctl restart markdown_i && echo deployed"
+# ---------- 3. 服务器端：覆盖源码（node_modules/dist 不动），index.html 最后覆盖 ----------
+Write-Host "[3/4] 安装源码（index.html 最后覆盖，防 CDN 缓存污染）..." -ForegroundColor Cyan
+ssh -i $key $server "cd $remoteDir && cp -r $tmp/src/. src/ && cp $tmp/package.json . && cp $tmp/.npmrc . && cp -r $tmp/scripts/. scripts/ 2>/dev/null; cd $tmp/public && find . -type f ! -name index.html -exec cp --parents {} $remoteDir/public/ \; && cp index.html $remoteDir/public/index.html && rm -rf $tmp && echo staged"
+
+# ---------- 4. 容器内 npm ci + build + 重启 ----------
+Write-Host "[4/4] 容器内构建并重启..." -ForegroundColor Cyan
+ssh -i $key $server "cd $rtDir && docker compose run --rm node bash -c 'cd /app && npm ci && npm run build' 2>&1 | tail -5 && docker compose restart node && echo deployed"
 
 Write-Host ""
-Write-Host "完成：GitHub 已备份，服务器已更新" -ForegroundColor Green
+Write-Host "完成：GitHub 已备份，容器已更新" -ForegroundColor Green
 Write-Host "提示：若改了 public 下的 css/js，记得升 index.html 的 ?v= 版本号" -ForegroundColor DarkGray
