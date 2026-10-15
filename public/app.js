@@ -9867,6 +9867,12 @@
       setCapsuleCollapsed(false);
       return;
     }
+    // 展开态：点击封面 → 播放/暂停
+    if (e.target.closest(".music-cover-wrap")) {
+      takeAutoplayMute();
+      togglePlay();
+      return;
+    }
     const btn = e.target.closest("[data-music-prev]");
     if (btn) { takeAutoplayMute(); prevSong(); return; }
     if (e.target.closest("[data-music-mode]")) { cyclePlayMode(); return; }
@@ -9883,6 +9889,30 @@
       return;
     }
   });
+
+  // Hover 展开/收起（仅真鼠标设备，触屏保持点击模式）
+  const MQ_HOVER = "(hover: hover) and (pointer: fine)";
+  if (window.matchMedia(MQ_HOVER).matches) {
+    let collapseTimer = 0;
+    const open = () => {
+      clearTimeout(collapseTimer);
+      if (musicCapsule.classList.contains("collapsed")) {
+        setCapsuleCollapsed(false);
+      }
+    };
+    const closeSoon = () => {
+      clearTimeout(collapseTimer);
+      collapseTimer = setTimeout(() => {
+        if (!musicCapsule.classList.contains("collapsed")) {
+          setCapsuleCollapsed(true);
+        }
+        if (musicLyric) musicLyric.hidden = true;
+        if (musicPlaylist) musicPlaylist.hidden = true;
+      }, 260);
+    };
+    musicEl.addEventListener("mouseenter", open);
+    musicEl.addEventListener("mouseleave", closeSoon);
+  }
 
   // 播放列表关闭
   musicPlaylist.querySelector("[data-music-close-list]").addEventListener("click", () => {
