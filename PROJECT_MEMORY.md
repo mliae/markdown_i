@@ -41,11 +41,16 @@
 - **部署顺序固定：先传资源，最后传 index.html**（防 CDN 缓存污染）
 - 版本号策略：`public/index.html` 中 `style.css` / `app.js` 的 `?v=` 必须递增，当前基准 `20261015a`
 
-## 最近改动（2026-10-15）
+## 最近改动（2026-10-15 ~ 2026-10-17）
 
 - 音乐胶囊改为 hover 展开 / 鼠标移走 260ms 延迟收起（仅 `(hover:hover) and (pointer:fine)` 设备）
 - 展开态点击封面 → 播放/暂停（`togglePlay`）
-- 已部署上线，版本号 `20261015a`，GitHub 已推送（commit e1f292b）
+- **修复友圈抓取只写入最后一条文章的严重 bug**：
+  - 根因：`src/friendfeed.ts` 中 `stmt.bind()` 在 D1 垫片里是原地修改，`items.map(it => stmt.bind(...))` 生成的全是同一对象且 binds 被最后一条覆盖，导致每轮只写入 feed 前 20 条中的最后一条
+  - `src/routes/photos.ts` 批量同步照片有同样 bug，一并修复
+  - 修复方式：每条 item 新建 `env.DB.prepare(insertSql).bind(...)`
+  - 验证：近 2 天新增文章从 0 变 29 篇，friend 6 从 1 条变 11 条
+  - 已部署，GitHub 已推送（commit 4c255a9 / 108caac）
 
 ## 待办 / 未完成事项
 
