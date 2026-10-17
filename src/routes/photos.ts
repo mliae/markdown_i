@@ -278,11 +278,13 @@ admin.post("/sync", requireAdmin, async c => {
   let inserted = 0;
   if (toInsert.length) {
     // sort_order 统一 0：列表按 sort_order ASC, id DESC 排序，同值时新的在前 → 最新同步的排最上面
-    const stmt = c.env.DB.prepare(
+    // 注意：必须每条 item 新建 prepare（D1 垫片的 bind 是原地修改，复用同一 stmt 会只写入最后一条）
+    const insertSql =
       `INSERT INTO photos (src, title, description, sort_order, visible, source_type, source_id, created_at, updated_at)
-       VALUES (?, '', '', 0, 1, ?, ?, ?, ?)`
+       VALUES (?, '', '', 0, 1, ?, ?, ?, ?)`;
+    const batch = toInsert.map(item =>
+      c.env.DB.prepare(insertSql).bind(item.src, item.source_type, item.source_id, now, now)
     );
-    const batch = toInsert.map(item => stmt.bind(item.src, item.source_type, item.source_id, now, now));
     await c.env.DB.batch(batch);
     inserted = toInsert.length;
   }

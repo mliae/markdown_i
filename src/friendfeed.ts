@@ -381,19 +381,21 @@ async function fetchOneFriend(env: Bindings, s: SiteSettings, f: FriendFeedRow):
   }
 
   const now = new Date().toISOString();
-  const stmt = env.DB.prepare(
-    `INSERT INTO friend_posts (friend_id, title, excerpt, link, images, published_at, created_at, updated_at)
+  const insertSql = `INSERT INTO friend_posts (friend_id, title, excerpt, link, images, published_at, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, COALESCE(NULLIF(?,''), ?), ?, ?)
      ON CONFLICT(friend_id, link) DO UPDATE SET
        title = excluded.title,
        excerpt = excluded.excerpt,
        images = excluded.images,
        published_at = CASE WHEN excluded.published_at <> '' THEN excluded.published_at ELSE friend_posts.published_at END,
-       updated_at = excluded.updated_at`
-  );
+       updated_at = excluded.updated_at`;
+  // 注意：必须每条 item 新建 prepare（D1 垫片的 bind 是原地修改，复用同一 stmt
+  // 会导致所有 item 的 binds 被最后一条覆盖，整批只写入最后一条）
   await env.DB.batch(
     items.map(it =>
-      stmt.bind(f.id, it.title, it.excerpt, it.link, JSON.stringify(it.images), it.published_at, now, now, now)
+      env.DB.prepare(insertSql).bind(
+        f.id, it.title, it.excerpt, it.link, JSON.stringify(it.images), it.published_at, now, now, now
+      )
     )
   );
   // 修剪库存：每源只留最新 12 篇
